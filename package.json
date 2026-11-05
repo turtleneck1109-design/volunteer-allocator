@@ -1,6 +1,6 @@
 {
   "name": "volunteer-allocator",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "description": "离线志愿者分组与 Excel 导出工具",
   "scripts": {
