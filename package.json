@@ -1,0 +1,11 @@
+{
+  "name": "volunteer-allocator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "离线志愿者分组与 Excel 导出工具",
+  "scripts": {
+    "test": "node scripts/test.cjs",
+    "build": "python3 scripts/build.py",
+    "package": "python3 scripts/package.py"
+  }
+}

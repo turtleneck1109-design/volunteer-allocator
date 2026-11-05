@@ -1,0 +1,11 @@
+.DS_Store
+__pycache__/
+node_modules/
+.env
+.env.*
+!.env.example
+/tests/*.xlsx
+/tests/*.zip
+/tests/*.eml
+/tests/feedback-fixture.json
+/releases/
