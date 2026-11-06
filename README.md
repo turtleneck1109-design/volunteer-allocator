@@ -4,7 +4,7 @@
 
 ## 在线使用
 
-访问：https://turtleneck1109-design.github.io/volunteer-allocator/
+访问：https://volunteer-allocator.turtleneck.top
 
 网站与离线包使用相同的功能。名单保存在当前浏览器，不会自动上传或共享；本地版本的数据需先下载项目备份，再在网站中“打开项目”导入。主分支更新并通过测试后，GitHub Pages 自动部署。
 
