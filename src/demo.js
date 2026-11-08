@@ -25,18 +25,8 @@ function playbackPlan(appointed,V){
  initial.confirmed={import:true,dedup:true};initial.teamDone=[];initial.stage='internal';
  const plan=V.remainingPlan(appointed);if(plan.pending)throw Error('演示名单有未完成分配');
  const states=[{label:'组长与家属',state:V.copy(appointed)},...plan.steps.filter(step=>step.state.stage!=='overview').map(step=>({...step,label:step.label.replace('全自动 · ','')}))];
- let previous=initial;const steps=[];
- const position=p=>p.group||(p.reserve?'reserve':'pending');
- for(const step of states){
-  const old=new Map(previous.people.map(p=>[p.id,p])),changed=new Set(step.state.people.filter(p=>position(p)!==position(old.get(p.id))).map(p=>p.id));
-  const units=V.units(step.state),seen=new Set(),moves=[];
-  for(const p of step.state.people){if(!changed.has(p.id)||seen.has(p.id))continue;const unit=units.find(u=>u.some(x=>x.id===p.id));const ids=unit.filter(x=>changed.has(x.id)).map(x=>x.id);ids.forEach(id=>seen.add(id));const targets=new Set(ids.map(id=>position(step.state.people.find(x=>x.id===id))));if(targets.size!==1)throw Error('演示绑定成员目标不一致');moves.push({ids,target:[...targets][0]})}
-  const reserves=moves.filter(move=>move.target==='reserve');
-  if(reserves.length){const intermediate=V.copy(step.state),reserved=new Set(reserves.flatMap(move=>move.ids));intermediate.people.forEach(p=>{if(reserved.has(p.id))Object.assign(p,V.copy(old.get(p.id)))});delete intermediate.confirmed.normal;steps.push({label:step.label,state:intermediate,moves:moves.filter(move=>move.target!=='reserve')});steps.push({label:'储备',state:V.copy(step.state),moves:reserves})}
-  else steps.push({...step,moves});
-  previous=step.state;
- }
- return {initial,steps,final:plan.state,total:steps.flatMap(step=>step.moves).reduce((n,move)=>n+move.ids.length,0)};
+ const playback=typeof module==='object'?require('./playback.js').AllocationPlayback:root.AllocationPlayback;
+ return playback.timeline(initial,states,plan.state,V);
 }
 root.Demo={sheets,playbackPlan};
 })(typeof module==='object'?module.exports:globalThis);

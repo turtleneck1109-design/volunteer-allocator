@@ -68,7 +68,19 @@ async function autoAssign(){if(busy||!['internal','team','couple','normal'].incl
  if(problem)return errorBox(problem);if(animationCancel)return;if(result.unplaced.length&&page!=='normal')errorBox(Error('仍有 '+result.unplaced.length+' 人无法安置，请调整容量或未锁定安排。'));else toast(page==='normal'?'分配完成，剩余人员已进入储备':'分配完成，可继续手动调整');
 }
 
-async function autoRemaining(){if(busy)return;if(pendingImports.length)return errorBox(Error('还有待导入或修改中的表格，请先完成导入。'));busy=true;document.querySelector('.app').inert=true;try{toast('正在生成剩余分配…');await new Promise(resolve=>setTimeout(resolve,30));const plan=V.remainingPlan(S);if(!await saveSnapshot('全自动分配前备份'))return;checkpoint();for(const step of plan.steps){if(!await saveSnapshot(step.label,step.state)){toast('保存失败，已停在最后保存的阶段');return}S=V.copy(step.state)}S=plan.state;page='overview';selected.clear();focusId=null;render();toast(plan.pending?'已生成草案，仍有 '+plan.pending+' 人待处理':'已生成完整分配草案，请在总览检查');}catch(e){errorBox(e)}finally{busy=false;document.querySelector('.app').inert=false;render()}}
+async function autoRemaining(){
+ if(busy)return false;if(pendingImports.length)return errorBox(Error('还有待导入或修改中的表格，请先完成导入。'));
+ busy=true;document.querySelector('.app').inert=true;
+ try{
+  await Promise.allSettled([...snapshotWrites]);
+  const plan=AllocationPlayback.remaining(S,V);
+  if(!await saveSnapshot('全自动分配前备份'))return false;
+  checkpoint();query='';filter='';selected.clear();focusId=null;
+  const run={kind:'remaining',paused:false,cancelled:false,skip:false,speed:'slow',animations:new Set(),done:0,total:plan.total,label:'准备分配',route:'',lastSaved:V.copy(S),before:{state:V.copy(S),history:history.slice(),page}};
+  demoPlayback=run;mountAllocationPlayer(run);run.task=playDemoTimeline(run,plan);await run.task;return !run.failed&&!run.cancelled;
+ }catch(e){const run=demoPlayback;if(run){run.cancelled=true;run.animations.forEach(animation=>animation.cancel());S=V.copy(run.lastSaved||run.before.state);demoPlayback=null}$('demoPlaybackPanel')?.remove();errorBox(e);return false}
+ finally{busy=false;document.querySelector('.app').inert=false;render()}
+}
 function selectedUnitIds(){return new Set(V.units(S).filter(u=>u.some(p=>selected.has(p.id))).flat().map(p=>p.id))}
 function moveSelected(target,anchor=null,after=false){mutate(()=>{V.move(S,[...selected],target,anchor,after)});selected.clear();render()}
 function toggleLock(){const ids=selectedUnitIds();if(!ids.size)return;const ps=S.people.filter(p=>ids.has(p.id));if(ps.some(leader))return toast('组长位置由任职设置管理');const unlock=ps.every(p=>p.locked);if(unlock&&(S.confirmed.normal||S.confirmed.overview||S.teamDone.length||S.confirmed.internal)){modal('解锁人员',`<p>解锁将使分配阶段需要重新确认，现有位置保留。</p><button class="primary" onclick="unlockSelection()">保存快照并解锁</button>`);return}mutate(()=>ps.forEach(p=>p.locked=!unlock))}
@@ -440,31 +452,31 @@ function exitDemo(){
 function toggleDemo(){return demoSession?exitDemo():enterDemo()}
 function resetDemo(mode=demoSession?.mode){if(busy||!demoSession)return false;try{const scene=buildDemoScene(mode);installDemoScene(scene,mode);toast('已重置演示场景');return true}catch(e){errorBox(e);return false}}
 const DEMO_PLAYBACK_CANCELLED=Symbol('demo-playback-cancelled');
-function demoPlaybackRate(run){return {slow:1,slower:.65,normal:1.8}[run.speed]||1}
+function demoPlaybackRate(run){return {slow:1,slower:.65,normal:1.8,fast:4}[run.speed]||1}
 async function waitDemoPlayback(run,duration=0){
  let remaining=duration,last=Date.now();
- while(remaining>0||run.paused){if(run.cancelled)throw DEMO_PLAYBACK_CANCELLED;await new Promise(resolve=>setTimeout(resolve,40));const current=Date.now();if(!run.paused)remaining-=(current-last)*demoPlaybackRate(run);last=current}
+ while(!run.skip&&(remaining>0||run.paused)){if(run.cancelled)throw DEMO_PLAYBACK_CANCELLED;await new Promise(resolve=>setTimeout(resolve,40));const current=Date.now();if(!run.paused)remaining-=(current-last)*demoPlaybackRate(run);last=current}
  if(run.cancelled)throw DEMO_PLAYBACK_CANCELLED;
 }
 function updateDemoPlaybackControls(){
  const run=demoPlayback;if(!run)return;
  $('demoPlaybackStage').textContent=run.label||'准备播放';
- $('demoPlaybackStatus').textContent=(run.paused?'已暂停':'播放中')+' · '+run.done+' / '+run.total+' 人';
+ $('demoPlaybackStatus').textContent=(run.paused?'已暂停':run.skip?'正在完成':run.kind==='remaining'?'分配中':'播放中')+' · '+run.done+' / '+run.total+' 人';
  $('demoPlaybackRoute').textContent=run.route||'姓名标签将从待分配移入各组';
  const button=$('demoPlaybackPause');button.textContent=run.paused?'▶ 继续':'Ⅱ 暂停';button.setAttribute('aria-pressed',String(run.paused));
  $('demoPlaybackProgress').value=run.done;$('demoPlaybackProgress').max=run.total||1;
 }
-function pauseDemoPlayback(){const run=demoPlayback;if(!run||run.cancelled)return;run.paused=!run.paused;run.animations.forEach(animation=>run.paused?animation.pause():animation.play());updateDemoPlaybackControls()}
-function setDemoPlaybackSpeed(speed){const run=demoPlayback;if(!run||!['slow','slower','normal'].includes(speed))return;run.speed=speed;run.animations.forEach(animation=>animation.updatePlaybackRate(demoPlaybackRate(run)))}
+function pauseDemoPlayback(){const run=demoPlayback;if(!run||run.cancelled||run.skip)return;run.paused=!run.paused;run.animations.forEach(animation=>run.paused?animation.pause():animation.play());updateDemoPlaybackControls()}
+function setDemoPlaybackSpeed(speed){const run=demoPlayback;if(!run||!['slow','slower','normal','fast'].includes(speed))return;run.speed=speed;run.animations.forEach(animation=>animation.updatePlaybackRate(demoPlaybackRate(run)))}
 function renderDemoPlaybackBoard(){
  const oldTargets=$('demoTargets'),oldPending=$('demoPending');const targetScroll=oldTargets?.scrollTop||0,pendingScroll=oldPending?.scrollTop||0;
- const pending=S.people.filter(p=>!p.group&&!p.reserve&&!p.independent),reserved=S.people.filter(p=>p.reserve);
- $('demoPlaybackBoard').innerHTML=`<section class="demo-pending pool" data-drop="pending"><div class="paneltitle">待分配 <span class="badge">${pending.length}</span></div><div class="members" id="demoPending">${pending.map(personChip).join('')||'<div class="empty">全部安排完成</div>'}</div></section><div class="demo-targets" id="demoTargets"><div class="demo-target-grid">${S.groups.map(g=>groupCard(g)).join('')}<section class="pool demo-reserve" data-drop="reserve"><div class="paneltitle">储备 <span class="badge">${reserved.length}</span></div><div class="members">${reserved.map(personChip).join('')||'<div class="empty">普通人员剩余后进入储备</div>'}</div></section></div></div>`;
+ const active=new Set(demoPlayback?.activeIds||[]),waiting=S.people.filter(p=>!p.group&&!p.reserve&&!p.independent&&!p.deferred),pending=[...waiting.filter(p=>active.has(p.id)),...waiting.filter(p=>!active.has(p.id))],reserved=S.people.filter(p=>p.reserve),independent=S.people.filter(p=>p.independent),deferred=S.people.filter(p=>p.deferred);
+ $('demoPlaybackBoard').innerHTML=`<section class="demo-pending pool" data-drop="pending"><div class="paneltitle">待分配 <span class="badge">${pending.length}</span></div>${deferred.length?`<div class="subtext">另有 ${deferred.length} 人待处理</div>`:''}<div class="members" id="demoPending">${pending.map(personChip).join('')||'<div class="empty">暂无待分配人员</div>'}</div></section><div class="demo-targets" id="demoTargets"><div class="demo-target-grid">${S.groups.map(g=>groupCard(g)).join('')}<section class="pool demo-reserve" data-drop="reserve"><div class="paneltitle">储备 <span class="badge">${reserved.length}</span></div><div class="members">${reserved.map(personChip).join('')||'<div class="empty">普通人员剩余后进入储备</div>'}</div></section>${independent.length||demoPlayback?.hasIndependent?`<section class="pool" data-drop="independent"><div class="paneltitle">独立区长 <span class="badge">${independent.length}</span></div><div class="members">${independent.map(personChip).join('')||'<div class="empty">独立管理区域</div>'}</div></section>`:''}</div></div>`;
  $('demoTargets').scrollTop=targetScroll;$('demoPending').scrollTop=pendingScroll;updateDemoPlaybackControls();
 }
 async function flyDemoUnit(run,ids,target){
  const destination=$('demoTargets').querySelector(`[data-drop="${target}"]`),sources=ids.map(id=>$('demoPending').querySelector(`[data-person="${id}"]`));
- if(!destination||sources.some(source=>!source))throw Error('演示标签或目标位置不可见，请重新播放');
+ if(!destination||sources.some(source=>!source))throw Error('姓名标签或目标位置不可见，已停止并保留已保存的阶段');
  destination.scrollIntoView({block:'nearest',behavior:'instant'});sources[0].scrollIntoView({block:'nearest',behavior:'instant'});
  const members=destination.querySelector('.members');members.scrollTop=members.scrollHeight;
  const end=members.getBoundingClientRect(),bounds=$('demoPending').getBoundingClientRect();
@@ -485,37 +497,60 @@ function applyDemoMove(move,state){
  S.people.forEach(p=>{if(ids.has(p.id)){const target=planned.get(p.id);p.group=target.group;p.reserve=target.reserve;p.independent=target.independent;p.locked=target.locked}});
  S.people=[...S.people.filter(p=>!ids.has(p.id)),...S.people.filter(p=>ids.has(p.id))];
 }
+function mountAllocationPlayer(run){
+ const real=run.kind==='remaining',title=real?'自动分配':'自动分配演示';
+ const panel=document.createElement('section');panel.id='demoPlaybackPanel';panel.className='demo-player';panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label',title);
+ panel.innerHTML=`<header class="demo-player-head"><div><strong>${title}</strong><span id="demoPlaybackStatus" role="status"></span></div><div class="demo-player-actions"><select aria-label="${real?'分配速度':'演示播放速度'}" onchange="setDemoPlaybackSpeed(this.value)"><option value="slower">更慢</option><option value="slow" selected>慢速</option><option value="normal">正常</option><option value="fast">快速</option></select><button class="primary" id="demoPlaybackPause" onclick="pauseDemoPlayback()" aria-pressed="false">Ⅱ 暂停</button>${real?'<button onclick="finishAllocationPlayback()">立即完成</button><button onclick="stopDemoPlayback()">停止并保留进度</button>':'<button onclick="stopDemoPlayback(\'restart\')">重新播放</button><button onclick="stopDemoPlayback(\'stop\')">结束播放</button><button onclick="stopDemoPlayback(\'exit\')">退出演示</button>'}</div></header><div class="demo-player-caption"><strong id="demoPlaybackStage"></strong><span id="demoPlaybackRoute"></span></div><progress id="demoPlaybackProgress" aria-label="${real?'分配进度':'演示分配进度'}" value="0" max="${run.total||1}"></progress><div class="demo-playback-board" id="demoPlaybackBoard" inert></div><div class="demo-player-note">${real?'关联成员一起移动 · 阶段完成自动保存 · 停止时还原当前阶段，保留已保存进度':'虚构名单 · 关联成员一起移动 · 每个阶段自动保存演示历史'}</div>`;
+ document.body.appendChild(panel);renderDemoPlaybackBoard();$('demoPlaybackPause').focus();
+}
+function finishAllocationPlayback(){
+ const run=demoPlayback;if(!run||run.kind!=='remaining'||run.cancelled)return;
+ run.skip=true;run.paused=false;run.animations.forEach(animation=>animation.finish());updateDemoPlaybackControls();
+}
 async function playDemoTimeline(run,plan){
- let error;
+ let error;const real=run.kind==='remaining';
  try{
   for(const step of plan.steps){
-   run.label=step.label;run.route='即将分配 · '+step.moves.reduce((n,m)=>n+m.ids.length,0)+' 人';renderDemoPlaybackBoard();await waitDemoPlayback(run,1000);
+   await waitDemoPlayback(run);
+   run.activeIds=step.moves.flatMap(move=>move.ids);run.hasIndependent=step.moves.some(move=>move.target==='independent');
+   // Only the current stage's moving people enter the temporary pending pool.
+   // A stop restores the most recent persisted stage, including original positions.
+   const moving=new Set(run.activeIds);S.people.forEach(p=>{if(moving.has(p.id)){p.group=null;p.reserve=false;p.independent=false}});dirty=true;
+   run.label=step.label;run.route='即将分配 · '+run.activeIds.length+' 人';renderDemoPlaybackBoard();await waitDemoPlayback(run,1000);
    for(const move of step.moves){
     await waitDemoPlayback(run);const unit=move.ids.map(personOf),g=groupOf(move.target);
-    run.route=unit.map(p=>p.name).join('、')+' → '+(g?g.no+'组 · '+g.name:'储备');updateDemoPlaybackControls();
-    await flyDemoUnit(run,move.ids,move.target);await waitDemoPlayback(run);
-    applyDemoMove(move,step.state);run.done+=move.ids.length;renderDemoPlaybackBoard();await waitDemoPlayback(run,450);
+    run.route=unit.map(p=>p.name).join('、')+' → '+(g?g.no+'组 · '+g.name:move.target==='independent'?'独立区长':move.target==='pending'?'待分配':'储备');updateDemoPlaybackControls();
+    if(!run.skip&&move.target!=='pending')await flyDemoUnit(run,move.ids,move.target);await waitDemoPlayback(run);
+    applyDemoMove(move,step.state);run.done+=move.ids.length;if(!run.skip)renderDemoPlaybackBoard();await waitDemoPlayback(run,450);
    }
-   await waitDemoPlayback(run);S=V.copy(step.state);await saveSnapshot('演示播放 · '+step.label);renderDemoPlaybackBoard();
+   await waitDemoPlayback(run);
+   if(!await saveSnapshot(real?(step.saveLabel||'全自动 · '+step.label):'演示播放 · '+step.label,step.state))throw Error('阶段保存失败，已还原到最近一次保存的进度，请检查本地存储后重试。');
+   S=V.copy(step.state);run.lastSaved=V.copy(S);renderDemoPlaybackBoard();
   }
-  await waitDemoPlayback(run);S=V.copy(plan.final);page='overview';await saveSnapshot('演示播放完成');
- }catch(e){S=run.before.state;history=run.before.history;page=S.stage||'internal';if(e!==DEMO_PLAYBACK_CANCELLED)error=e}
- finally{run.animations.forEach(animation=>animation.cancel());document.querySelectorAll('.demo-flying').forEach(el=>el.remove());$('demoPlaybackPanel')?.remove();document.querySelector('.app').inert=false;demoPlayback=null;busy=false;dirty=false;render();$('demoModeButton')?.focus()}
- if(error)errorBox(error);else if(!run.cancelled)toast('演示播放完成，可查看分组结果或重新播放');
+  await waitDemoPlayback(run);
+  if(!await saveSnapshot(real?'全自动分配完成':'演示播放完成',plan.final))throw Error('最终保存失败，已保留完成的阶段，请重试。');
+  S=V.copy(plan.final);run.lastSaved=V.copy(S);page='overview';
+ }catch(e){
+  S=V.copy(real?run.lastSaved:run.before.state);if(!real)history=run.before.history;
+  page=real?(S.stage||run.before.page):S.stage||'internal';
+  if(e!==DEMO_PLAYBACK_CANCELLED){error=e;run.failed=true}
+ }finally{
+  run.animations.forEach(animation=>animation.cancel());document.querySelectorAll('.demo-flying').forEach(el=>el.remove());$('demoPlaybackPanel')?.remove();document.querySelector('.app').inert=false;demoPlayback=null;busy=false;dirty=false;render();$(real?'autoRemainingButton':'demoModeButton')?.focus();
+ }
+ if(error)errorBox(error);else if(!run.cancelled)toast(real?(plan.pending?'分配完成，仍有 '+plan.pending+' 人待处理，请在总览核对':'分配完成，已保存各阶段，可在总览核对'):'演示播放完成，可查看分组结果或重新播放');
 }
 async function startDemoPlayback(){
  if(!demoSession||busy||demoPlayback)return false;
  try{
   const scene=buildDemoScene('allocate'),plan=Demo.playbackPlan(scene.state,V);installDemoScene(scene,'allocate');
-  const run={paused:false,cancelled:false,speed:'slow',animations:new Set(),done:0,total:plan.total,label:'准备播放',route:'',before:{state:V.copy(S),history:history.slice()}};
+  const run={kind:'demo',paused:false,cancelled:false,speed:'slow',animations:new Set(),done:0,total:plan.total,label:'准备播放',route:'',before:{state:V.copy(S),history:history.slice()}};
   demoPlayback=run;busy=true;S=V.copy(plan.initial);document.querySelector('.app').inert=true;
-  const panel=document.createElement('section');panel.id='demoPlaybackPanel';panel.className='demo-player';panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','自动分配演示');
-  panel.innerHTML=`<header class="demo-player-head"><div><strong>自动分配演示</strong><span id="demoPlaybackStatus" role="status"></span></div><div class="demo-player-actions"><select aria-label="演示播放速度" onchange="setDemoPlaybackSpeed(this.value)"><option value="slower">更慢</option><option value="slow" selected>慢速</option><option value="normal">正常</option></select><button class="primary" id="demoPlaybackPause" onclick="pauseDemoPlayback()">Ⅱ 暂停</button><button onclick="stopDemoPlayback('restart')">重新播放</button><button onclick="stopDemoPlayback('stop')">结束播放</button><button onclick="stopDemoPlayback('exit')">退出演示</button></div></header><div class="demo-player-caption"><strong id="demoPlaybackStage"></strong><span id="demoPlaybackRoute"></span></div><progress id="demoPlaybackProgress" aria-label="演示分配进度" value="0" max="48"></progress><div class="demo-playback-board" id="demoPlaybackBoard" inert></div><div class="demo-player-note">虚构名单 · 关联成员一起移动 · 每个阶段自动保存演示历史</div>`;
-  document.body.appendChild(panel);renderDemoPlaybackBoard();$('demoPlaybackPause').focus();run.task=playDemoTimeline(run,plan);await run.task;return true;
+  mountAllocationPlayer(run);run.task=playDemoTimeline(run,plan);await run.task;return !run.failed;
  }catch(e){const run=demoPlayback;if(run){run.cancelled=true;run.animations.forEach(animation=>animation.cancel());S=run.before.state;history=run.before.history;demoPlayback=null}busy=false;document.querySelector('.app').inert=false;$('demoPlaybackPanel')?.remove();document.querySelectorAll('.demo-flying').forEach(el=>el.remove());render();errorBox(e);return false}
 }
 async function stopDemoPlayback(action='stop'){
  const run=demoPlayback;if(!run||run.stopping)return;run.stopping=true;run.cancelled=true;run.paused=false;run.animations.forEach(animation=>animation.cancel());await run.task;
+ if(run.kind==='remaining'){toast('已停止，当前阶段已还原，已保存的阶段保留');return}
  if(action==='restart')return startDemoPlayback();if(action==='exit')return exitDemo();toast('已结束播放，返回分配起点');
 }
 
