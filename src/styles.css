@@ -148,3 +148,14 @@ dialog{max-height:88vh;padding:22px;width:840px}
 .search-results button{padding:4px 7px;color:var(--blue)}
 .toolbar [hidden],#deferredPool:empty{display:none}
 @media(max-width:720px){.toolbar .search{min-width:180px;flex:1}.search-results{flex-basis:100%}}
+
+.demo-banner{margin:18px 34px 0;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;background:#eef4ff;border:1px solid #cbd9fc;border-radius:12px;color:#33539b}
+.demo-banner[hidden]{display:none}
+.demo-banner strong{font-size:13px;margin-right:12px}
+.demo-banner span{font-size:12px;color:#667ca3}
+.demo-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.demo-controls button,.demo-controls select{font-size:12px}
+:root[data-theme="dark"] .demo-banner{background:#1d2d49;border-color:#3b557e;color:#c6d7fa}
+:root[data-theme="dark"] .demo-banner span{color:#9db5d8}
+@media(max-width:1180px){.demo-banner{margin:16px 22px 0}}
+@media(max-width:720px){.demo-banner{margin:14px 16px 0;padding:12px}.demo-banner span{display:block;margin-top:4px}.demo-controls{width:100%}.demo-controls select{flex:1;max-width:none}}
