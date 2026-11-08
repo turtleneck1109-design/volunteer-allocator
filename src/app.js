@@ -5,7 +5,7 @@ let S=V.blank(),page='import',selected=new Set(),focusId=null,filter='',query=''
 let pendingImports=[],exportCols=[],exportSelection=[],exportMode='book',exportSpecial='',exportInitialized=false;
 let issuePeople=new Set(),allocationSpeed='normal',animationPaused=false,animationSkip=false;
 let searchComposing=false;
-let demoSession=null;
+let demoSession=null,demoPlayback=null;
 const snapshotWrites=new Set();
 const colors=['#8d6ac8','#279f97','#ce8750','#5c83cd','#be6592','#819a4b'];
 const groupOf=id=>S.groups.find(g=>g.id===id),personOf=id=>S.people.find(p=>p.id===id),leader=p=>S.groups.some(g=>g.leader===p.id),personLocation=p=>p.independent?'independent':p.group||(p.reserve?'reserve':'pending');
@@ -369,7 +369,7 @@ function endColumnDrag(){draggedColumn=null;document.querySelectorAll('.export-c
 function reorderedColumns(cols,key,target,after){if(key===target||!cols.includes(key)||!cols.includes(target))return [...cols];const next=cols.filter(k=>k!==key),index=next.indexOf(target)+(after?1:0);next.splice(index,0,key);return next}
 function dropColumnDrag(event,index){if(draggedColumn===null)return;event.preventDefault();const rect=event.currentTarget.getBoundingClientRect(),key=draggedColumn;exportCols=reorderedColumns(exportCols,key,exportCols[index],event.clientX>=rect.left+rect.width/2);endColumnDrag();rememberExport();renderExport();document.querySelectorAll('.export-column-tag')[exportCols.indexOf(key)]?.focus({preventScroll:true})}
 function shiftColumn(i,d){if(i+d<0||i+d>=exportCols.length)return;[exportCols[i],exportCols[i+d]]=[exportCols[i+d],exportCols[i]];rememberExport();renderExport()}
-function outputSheet(g,reserve=false,withdrawn=false){const cols=availableColumns(),ps=withdrawn?(S.withdrawn||[]):S.people.filter(p=>reserve?p.reserve:p.group===g.id);const header=exportCols.map(k=>exportColumnLabel(k)),rows=[[S.name],[withdrawn?'放弃参加名单':reserve?'储备名单':g.no+'组 · '+g.name],['导出时间：'+now()+' · 项目修订 '+S.revision],...((reserve||withdrawn)?[]:[['小组长：'+(personOf(g.leader)?.name||'未设置')+'　区长：'+(personOf(g.area)?.name||'未设置')]]),[],header,...ps.map(p=>exportCols.map(k=>String(columnValue(p,k))))];const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=header.map(()=>({wch:20}));const start=(reserve||withdrawn)?4:5;ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:start,c:0},e:{r:rows.length-1,c:Math.max(0,header.length-1)}})};return ws}
+function outputSheet(g,reserve=false,withdrawn=false){const cols=availableColumns(),ps=withdrawn?(S.withdrawn||[]):S.people.filter(p=>reserve?p.reserve:p.group===g.id);const header=exportCols.map(k=>exportColumnLabel(k)),rows=[[S.name],[withdrawn?'放弃参加名单':reserve?'储备名单':g.no+'组 · '+g.name],['导出时间：'+now()],...((reserve||withdrawn)?[]:[['小组长：'+(personOf(g.leader)?.name||'未设置')+'　区长：'+(personOf(g.area)?.name||'未设置')]]),[],header,...ps.map(p=>exportCols.map(k=>String(columnValue(p,k))))];const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=header.map(()=>({wch:20}));const start=(reserve||withdrawn)?4:5;ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:start,c:0},e:{r:rows.length-1,c:Math.max(0,header.length-1)}})};return ws}
 function workbookFor(gs,withReserve=false,withWithdrawn=false){if(!exportCols.length)throw Error('至少选择一列');const wb=XLSX.utils.book_new();gs.forEach((g,i)=>{let name=(g.no+'组-'+g.name).replace(/[\\/?*\[\]:]/g,'_').slice(0,24)+'-'+(i+1);XLSX.utils.book_append_sheet(wb,outputSheet(g),name)});if(withReserve)XLSX.utils.book_append_sheet(wb,outputSheet(null,true),'储备名单');if(withWithdrawn)XLSX.utils.book_append_sheet(wb,outputSheet(null,false,true),'放弃参加名单');if(!wb.SheetNames.length)throw Error('请选择小组、储备或放弃参加名单');return new Uint8Array(XLSX.write(wb,{bookType:'xlsx',type:'array'}))}
 function exportExcel(){try{const gs=S.groups.filter(g=>exportSelection.includes(g.id));if(exportMode==='book')download(safeName(S.name)+'-分组名单.xlsx',workbookFor(gs,!!exportSpecial,!!S.exportWithdrawn));else{const files=gs.map((g,i)=>({name:safeName(g.no+'组-'+g.name)+'-'+(i+1)+'.xlsx',data:workbookFor([g])}));if(exportSpecial)files.push({name:'储备名单.xlsx',data:workbookFor([],true)});if(S.exportWithdrawn)files.push({name:'放弃参加名单.xlsx',data:workbookFor([],false,true)});if(!files.length)throw Error('请选择要导出的名单');download(safeName(S.name)+'-分组名单.zip',zipFiles(files))}toast('Excel 已生成')}catch(e){errorBox(e)}}
 function mailData(){const gs=S.groups.filter(g=>exportSelection.includes(g.id));if(!gs.length)throw Error('请选择至少一个小组');if(!exportCols.length)throw Error('请选择导出列');const subject=$('mailSubject').value.replace(/[\r\n]/g,' '),body=$('mailBody').value;return gs.map(g=>{const p=personOf(g.leader);if(!p)throw Error(g.name+' 尚未设置组长');const email=document.querySelector('[data-mail-group="'+g.id+'"]').value.trim();if(!/^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(email))throw Error(g.name+'：请填写有效的组长邮箱');const replace=s=>s.replaceAll('{小组}',g.no+'组 · '+g.name).replaceAll('{组长}',p.name);return {g,p,email,subject:replace(subject),body:replace(body)}})}
@@ -439,9 +439,89 @@ function exitDemo(){
 }
 function toggleDemo(){return demoSession?exitDemo():enterDemo()}
 function resetDemo(mode=demoSession?.mode){if(busy||!demoSession)return false;try{const scene=buildDemoScene(mode);installDemoScene(scene,mode);toast('已重置演示场景');return true}catch(e){errorBox(e);return false}}
+const DEMO_PLAYBACK_CANCELLED=Symbol('demo-playback-cancelled');
+function demoPlaybackRate(run){return {slow:1,slower:.65,normal:1.8}[run.speed]||1}
+async function waitDemoPlayback(run,duration=0){
+ let remaining=duration,last=Date.now();
+ while(remaining>0||run.paused){if(run.cancelled)throw DEMO_PLAYBACK_CANCELLED;await new Promise(resolve=>setTimeout(resolve,40));const current=Date.now();if(!run.paused)remaining-=(current-last)*demoPlaybackRate(run);last=current}
+ if(run.cancelled)throw DEMO_PLAYBACK_CANCELLED;
+}
+function updateDemoPlaybackControls(){
+ const run=demoPlayback;if(!run)return;
+ $('demoPlaybackStage').textContent=run.label||'准备播放';
+ $('demoPlaybackStatus').textContent=(run.paused?'已暂停':'播放中')+' · '+run.done+' / '+run.total+' 人';
+ $('demoPlaybackRoute').textContent=run.route||'姓名标签将从待分配移入各组';
+ const button=$('demoPlaybackPause');button.textContent=run.paused?'▶ 继续':'Ⅱ 暂停';button.setAttribute('aria-pressed',String(run.paused));
+ $('demoPlaybackProgress').value=run.done;$('demoPlaybackProgress').max=run.total||1;
+}
+function pauseDemoPlayback(){const run=demoPlayback;if(!run||run.cancelled)return;run.paused=!run.paused;run.animations.forEach(animation=>run.paused?animation.pause():animation.play());updateDemoPlaybackControls()}
+function setDemoPlaybackSpeed(speed){const run=demoPlayback;if(!run||!['slow','slower','normal'].includes(speed))return;run.speed=speed;run.animations.forEach(animation=>animation.updatePlaybackRate(demoPlaybackRate(run)))}
+function renderDemoPlaybackBoard(){
+ const oldTargets=$('demoTargets'),oldPending=$('demoPending');const targetScroll=oldTargets?.scrollTop||0,pendingScroll=oldPending?.scrollTop||0;
+ const pending=S.people.filter(p=>!p.group&&!p.reserve&&!p.independent),reserved=S.people.filter(p=>p.reserve);
+ $('demoPlaybackBoard').innerHTML=`<section class="demo-pending pool" data-drop="pending"><div class="paneltitle">待分配 <span class="badge">${pending.length}</span></div><div class="members" id="demoPending">${pending.map(personChip).join('')||'<div class="empty">全部安排完成</div>'}</div></section><div class="demo-targets" id="demoTargets"><div class="demo-target-grid">${S.groups.map(g=>groupCard(g)).join('')}<section class="pool demo-reserve" data-drop="reserve"><div class="paneltitle">储备 <span class="badge">${reserved.length}</span></div><div class="members">${reserved.map(personChip).join('')||'<div class="empty">普通人员剩余后进入储备</div>'}</div></section></div></div>`;
+ $('demoTargets').scrollTop=targetScroll;$('demoPending').scrollTop=pendingScroll;updateDemoPlaybackControls();
+}
+async function flyDemoUnit(run,ids,target){
+ const destination=$('demoTargets').querySelector(`[data-drop="${target}"]`),sources=ids.map(id=>$('demoPending').querySelector(`[data-person="${id}"]`));
+ if(!destination||sources.some(source=>!source))throw Error('演示标签或目标位置不可见，请重新播放');
+ destination.scrollIntoView({block:'nearest',behavior:'instant'});sources[0].scrollIntoView({block:'nearest',behavior:'instant'});
+ const members=destination.querySelector('.members');members.scrollTop=members.scrollHeight;
+ const end=members.getBoundingClientRect(),bounds=$('demoPending').getBoundingClientRect();
+ destination.classList.add('receiving');const clones=[];
+ try{
+  await Promise.all(sources.map(async(source,i)=>{
+   const r=source.getBoundingClientRect(),clone=source.cloneNode(true);clone.removeAttribute('data-person');clone.removeAttribute('onclick');clone.setAttribute('aria-hidden','true');clone.classList.add('flying-person','demo-flying');const top=Math.min(Math.max(r.top,bounds.top+6),bounds.bottom-Math.min(r.height,bounds.height));
+   Object.assign(clone.style,{left:r.left+'px',top:top+'px',width:r.width+'px',margin:'0'});document.body.appendChild(clone);clones.push(clone);source.classList.add('demo-in-flight');
+   const animation=clone.animate([{transform:'translate(0,0)',opacity:1},{transform:`translate(${end.left+12+(i%2)*18-r.left}px,${end.top+14+(i%4)*26-top}px)`,opacity:1}],{duration:2200,easing:'ease-in-out',fill:'forwards'});
+   run.animations.add(animation);animation.updatePlaybackRate(demoPlaybackRate(run));if(run.paused)animation.pause();
+   try{await animation.finished}catch(e){if(!run.cancelled)throw e}finally{run.animations.delete(animation)}
+  }));
+  await waitDemoPlayback(run);
+ }finally{clones.forEach(clone=>clone.remove());sources.forEach(source=>source.classList.remove('demo-in-flight'));destination.classList.remove('receiving')}
+}
+function applyDemoMove(move,state){
+ const ids=new Set(move.ids),planned=new Map(state.people.map(p=>[p.id,p]));
+ S.people.forEach(p=>{if(ids.has(p.id)){const target=planned.get(p.id);p.group=target.group;p.reserve=target.reserve;p.independent=target.independent;p.locked=target.locked}});
+ S.people=[...S.people.filter(p=>!ids.has(p.id)),...S.people.filter(p=>ids.has(p.id))];
+}
+async function playDemoTimeline(run,plan){
+ let error;
+ try{
+  for(const step of plan.steps){
+   run.label=step.label;run.route='即将分配 · '+step.moves.reduce((n,m)=>n+m.ids.length,0)+' 人';renderDemoPlaybackBoard();await waitDemoPlayback(run,1000);
+   for(const move of step.moves){
+    await waitDemoPlayback(run);const unit=move.ids.map(personOf),g=groupOf(move.target);
+    run.route=unit.map(p=>p.name).join('、')+' → '+(g?g.no+'组 · '+g.name:'储备');updateDemoPlaybackControls();
+    await flyDemoUnit(run,move.ids,move.target);await waitDemoPlayback(run);
+    applyDemoMove(move,step.state);run.done+=move.ids.length;renderDemoPlaybackBoard();await waitDemoPlayback(run,450);
+   }
+   await waitDemoPlayback(run);S=V.copy(step.state);await saveSnapshot('演示播放 · '+step.label);renderDemoPlaybackBoard();
+  }
+  await waitDemoPlayback(run);S=V.copy(plan.final);page='overview';await saveSnapshot('演示播放完成');
+ }catch(e){S=run.before.state;history=run.before.history;page=S.stage||'internal';if(e!==DEMO_PLAYBACK_CANCELLED)error=e}
+ finally{run.animations.forEach(animation=>animation.cancel());document.querySelectorAll('.demo-flying').forEach(el=>el.remove());$('demoPlaybackPanel')?.remove();document.querySelector('.app').inert=false;demoPlayback=null;busy=false;dirty=false;render();$('demoModeButton')?.focus()}
+ if(error)errorBox(error);else if(!run.cancelled)toast('演示播放完成，可查看分组结果或重新播放');
+}
+async function startDemoPlayback(){
+ if(!demoSession||busy||demoPlayback)return false;
+ try{
+  const scene=buildDemoScene('allocate'),plan=Demo.playbackPlan(scene.state,V);installDemoScene(scene,'allocate');
+  const run={paused:false,cancelled:false,speed:'slow',animations:new Set(),done:0,total:plan.total,label:'准备播放',route:'',before:{state:V.copy(S),history:history.slice()}};
+  demoPlayback=run;busy=true;S=V.copy(plan.initial);document.querySelector('.app').inert=true;
+  const panel=document.createElement('section');panel.id='demoPlaybackPanel';panel.className='demo-player';panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','自动分配演示');
+  panel.innerHTML=`<header class="demo-player-head"><div><strong>自动分配演示</strong><span id="demoPlaybackStatus" role="status"></span></div><div class="demo-player-actions"><select aria-label="演示播放速度" onchange="setDemoPlaybackSpeed(this.value)"><option value="slower">更慢</option><option value="slow" selected>慢速</option><option value="normal">正常</option></select><button class="primary" id="demoPlaybackPause" onclick="pauseDemoPlayback()">Ⅱ 暂停</button><button onclick="stopDemoPlayback('restart')">重新播放</button><button onclick="stopDemoPlayback('stop')">结束播放</button><button onclick="stopDemoPlayback('exit')">退出演示</button></div></header><div class="demo-player-caption"><strong id="demoPlaybackStage"></strong><span id="demoPlaybackRoute"></span></div><progress id="demoPlaybackProgress" aria-label="演示分配进度" value="0" max="48"></progress><div class="demo-playback-board" id="demoPlaybackBoard" inert></div><div class="demo-player-note">虚构名单 · 关联成员一起移动 · 每个阶段自动保存演示历史</div>`;
+  document.body.appendChild(panel);renderDemoPlaybackBoard();$('demoPlaybackPause').focus();run.task=playDemoTimeline(run,plan);await run.task;return true;
+ }catch(e){const run=demoPlayback;if(run){run.cancelled=true;run.animations.forEach(animation=>animation.cancel());S=run.before.state;history=run.before.history;demoPlayback=null}busy=false;document.querySelector('.app').inert=false;$('demoPlaybackPanel')?.remove();document.querySelectorAll('.demo-flying').forEach(el=>el.remove());render();errorBox(e);return false}
+}
+async function stopDemoPlayback(action='stop'){
+ const run=demoPlayback;if(!run||run.stopping)return;run.stopping=true;run.cancelled=true;run.paused=false;run.animations.forEach(animation=>animation.cancel());await run.task;
+ if(action==='restart')return startDemoPlayback();if(action==='exit')return exitDemo();toast('已结束播放，返回分配起点');
+}
+
 function renderDemoMode(){
  const button=$('demoModeButton');if(button)button.innerHTML=demoSession?'<span aria-hidden="true">↩</span>退出演示':'<span aria-hidden="true">▷</span>演示模式';
- const banner=$('demoBanner');if(banner){banner.hidden=!demoSession;banner.innerHTML=demoSession?`<div><strong>演示模式</strong><span>虚构名单 · 退出或刷新返回原活动</span></div><div class="demo-controls"><select aria-label="演示场景" onchange="resetDemo(this.value)">${Object.entries({result:'分组结果',allocate:'分配体验',import:'导入与查重'}).map(([key,label])=>`<option value="${key}" ${demoSession.mode===key?'selected':''}>${label}</option>`).join('')}</select><button onclick="resetDemo()">重新开始</button><button class="primary" onclick="exitDemo()">退出演示</button></div>`:''}
+ const banner=$('demoBanner');if(banner){banner.hidden=!demoSession;banner.innerHTML=demoSession?`<div><strong>演示模式</strong><span>虚构名单 · 退出或刷新返回原活动</span></div><div class="demo-controls"><select aria-label="演示场景" onchange="resetDemo(this.value)">${Object.entries({result:'分组结果',allocate:'分配体验',import:'导入与查重'}).map(([key,label])=>`<option value="${key}" ${demoSession.mode===key?'selected':''}>${label}</option>`).join('')}</select><button class="primary" onclick="startDemoPlayback()">▶ 自动演示</button><button onclick="resetDemo()">重新开始</button><button onclick="exitDemo()">退出演示</button></div>`:''}
  const save=$('saveProjectButton');if(save)save.textContent=demoSession?'保存演示':'保存项目';
 }
 
