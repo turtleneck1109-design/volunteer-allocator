@@ -10,7 +10,7 @@ vm.runInContext(`
  const duplicates=V.duplicateSets(S);if(duplicates.length!==1)throw Error('查重失败');
  const keep=duplicates[0].find(p=>p.cat==='internal');V.merge(S,duplicates[0].map(p=>p.id),keep.id,true);V.resolveFamily(S);
  if(S.people.length!==31||V.relationErrors(S).length)throw Error('查重或家属绑定失败');
- S.groups.forEach((g,i)=>g.leader=S.people.filter(p=>p.intent==='小组长')[i].id);S.groups[0].area=S.people.find(p=>p.intent==='区长').id;
+ S.groups.forEach((g,i)=>g.leader=S.people.filter(p=>p.cat==='internal')[i].id);S.groups[0].area=S.people.filter(p=>p.cat==='internal')[3].id;
  V.placeLeaders(S);if(S.people.filter(p=>p.group).length!==4)throw Error('组长和家属未正确安排');
  V.allocate(S,'internal','',123);V.units(S).filter(u=>V.eligible(u,'internal')).flat().forEach(p=>p.locked=true);
  for(const team of allTeams()){V.allocate(S,'team',team,123);V.units(S).filter(u=>V.eligible(u,'team',team)).flat().forEach(p=>p.locked=true)}
