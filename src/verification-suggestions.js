@@ -31,7 +31,7 @@ async function suggest(reference,rows,scope,V,A,options={}){
   const next=rows.map(r=>({...r}));edits.forEach(e=>{next[byId.get(e.id)]={...next[byId.get(e.id)],target:e.target,group:''}});
   const after=A.audit(s,next,scope,V);result.tested++;
   if(base.components.some(c=>!after.components.some(x=>x.name===c.name)))return;
-  if(after.errors>base.errors||after.score<base.score||after.rawScore<base.rawScore)return;
+  if(after.score===null||after.errors>base.errors||after.score<base.score||after.rawScore<base.rawScore)return;
   if(after.score===base.score&&after.rawScore===base.rawScore&&after.errors===base.errors)return;
   const improved=after.components.flatMap(c=>{const old=base.components.find(x=>x.name===c.name);return old&&c.score>old.score?[c.name+' '+old.score+' → '+c.score]:[]});
   const plan={edits:edits.map(e=>{const p=s.people.find(p=>p.id===e.id);return {...e,name:p.name,student:p.student,from:targetName(positions.get(p.id)),to:targetName(e.target),source:rows[byId.get(e.id)].source}}),before:base.score,after:after.score,gain:after.score-base.score,rawGain:after.rawScore-base.rawScore,errorsBefore:base.errors,errorsAfter:after.errors,reasons:improved,remainingErrors:after.errors};

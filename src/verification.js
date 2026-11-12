@@ -2,6 +2,18 @@
 (function(root){
 'use strict';
 const text=x=>String(x??'').trim(),norm=x=>text(x).replace(/\s+/g,'');
+const criteria=[
+ {key:'identity',name:'名单准确完整',weight:30,note:'未知人员、姓名学号冲突、重复安排；全量核对另查遗漏。'},
+ {key:'capacity',name:'岗位名额',weight:25,note:'按缺额与超额人数占总名额的比例扣分。'},
+ {key:'binding',name:'关联同组',weight:20,note:'按拆分的绑定单元及原始关联问题比例扣分。'},
+ {key:'roles',name:'任职位置',weight:10,note:'检查已设置组长和独立区长的位置，同组号可共用组长。'},
+ {key:'internal',name:'内部均衡',weight:5,note:'内部人员尽量均分，组长不计入。'},
+ {key:'photo',name:'摄影均衡',weight:5,note:'摄影人员按岗位容量限制尽量均分。'},
+ {key:'run',name:'小闪电均衡',weight:5,note:'小闪电人员按岗位容量限制尽量均分。'}
+];
+const defaultWeights=()=>Object.fromEntries(criteria.map(c=>[c.key,c.weight]));
+function weights(value){return Object.fromEntries(criteria.map(c=>{const n=value?.[c.key];return [c.key,typeof n==='number'&&Number.isInteger(n)&&n>=0&&n<=100?n:c.weight]}))}
+function validateWeights(value){if(criteria.some(c=>typeof value?.[c.key]!=='number'||!Number.isInteger(value[c.key])||value[c.key]<0||value[c.key]>100))throw Error('各项权重请填写 0～100 的整数');if(!criteria.some(c=>value[c.key]>0))throw Error('至少一项权重须大于 0');return weights(value)}
 function infer(headers){
  const find=names=>headers.findIndex(h=>names.includes(norm(h).replace(/^Q\d+[.、．]?/i,'')));
  return {name:find(['姓名','您的姓名','志愿者姓名']),student:find(['学号','您的学号','学生学号']),group:find(['小组','小组名称','岗位','岗位名称','子岗位','组号'])};
@@ -16,7 +28,8 @@ function groupMatches(value,groups){
 function records(sheets){return sheets.filter(s=>s.enabled).flatMap(s=>s.rows.slice(s.header+1).flatMap((r,i)=>{
  const get=k=>s.map[k]>=0?text(r[s.map[k]]):'';if(!r.some(x=>text(x)))return [];
  return [{name:get('name'),student:get('student'),group:s.target?'':get('group'),target:s.target||'',source:s.file+' / '+s.name+' 第'+(s.header+i+2)+'行'}];}))}
-function audit(reference,rows,scope,V){
+function audit(reference,rows,scope,V,customWeights=reference.verificationWeights){
+ const scoringWeights=weights(customWeights);
  const s=V.copy(reference),issues=[],add=(severity,kind,message,source='')=>issues.push({severity,kind,message,source});
  const ready=s.people.length&&s.groups.length&&s.confirmed.dedup&&!V.duplicateSets(s).length;
  if(!ready)return {score:null,status:'请先导入原始名单、小组名额，并完成查重确认',issues,components:[],groups:[],matched:0,rows:rows.length};
@@ -52,22 +65,22 @@ function audit(reference,rows,scope,V){
  if(checkedGroups.some(g=>!g.leader))add('warning','任职未设置','部分岗位尚未设置组长，这些岗位的组长检查未计分');
  s.people.forEach(p=>{const a=assignments.get(p.id);if(a?.target==='independent'&&!p.independent){roleFaults++;add('error','独立区长',p.name+' 尚未设置为独立管理区长')}if(p.independent&&a&&a.target!=='independent'){roleFaults++;add('error','独立区长',p.name+' 已设为独立区长，不应再占组内或储备名额')}
   const g=groupResults.find(g=>g.id===a?.target);if(g){g.internal+=Number(p.cat==='internal'&&!leaders.has(p.id));g.photo+=Number(p.photo);g.run+=Number(p.run)}});
- const components=[],part=(name,max,loss,denominator,note)=>components.push({name,max,score:Math.round(max*(1-Math.min(1,loss/Math.max(1,denominator)))*10)/10,note});
- part('名单准确完整',30,identityFaults,Math.max(rows.length,scope==='all'?expected.length:0),'未知、冲突、重复记录；全量核对另检查遗漏');
- part('岗位名额',25,capLoss,checkedGroups.reduce((n,g)=>n+g.cap,0),'按缺额与超额人数占总名额的比例扣分');
- if(units.length||relationProblems.length)part('关联同组',20,broken+relationProblems.length,units.length+relationProblems.length,'已绑定的情侣、家属及团体须同一子岗位');
- if(roleGroups.size||roleFaults)part('任职位置',10,roleFaults,roleGroups.size,'同组号子岗位可共用组长，组长只占一次名额');
+ const components=[],part=(key,loss,denominator,note)=>{const max=scoringWeights[key],name=criteria.find(c=>c.key===key).name;components.push({key,name,max,score:Math.round(max*(1-Math.min(1,loss/Math.max(1,denominator)))*10)/10,note})};
+ part('identity',identityFaults,Math.max(rows.length,scope==='all'?expected.length:0),'未知、冲突、重复记录；全量核对另检查遗漏');
+ part('capacity',capLoss,checkedGroups.reduce((n,g)=>n+g.cap,0),'按缺额与超额人数占总名额的比例扣分');
+ if(units.length||relationProblems.length)part('binding',broken+relationProblems.length,units.length+relationProblems.length,'已绑定的情侣、家属及团体须同一子岗位');
+ if(roleGroups.size||roleFaults)part('roles',roleFaults,roleGroups.size,'同组号子岗位可共用组长，组长只占一次名额');
  for(const [key,label] of [['internal','内部均衡'],['photo','摄影均衡'],['run','小闪电均衡']]){
   const total=groupResults.reduce((n,g)=>n+g[key],0);if(!total||groupResults.length<2)continue;
   // Equal target, capped by each position's capacity. This is a soft indicator, not a feasibility proof.
   let remaining=total;const targets=groupResults.map(()=>0);let open=groupResults.map((g,i)=>i);
   while(open.length){const average=remaining/open.length,capped=open.filter(i=>groupResults[i].cap<average);if(!capped.length){open.forEach(i=>targets[i]=average);break}capped.forEach(i=>{targets[i]=groupResults[i].cap;remaining-=targets[i]});open=open.filter(i=>!capped.includes(i))}
   const loss=groupResults.reduce((n,g,i)=>n+Math.abs(g[key]-targets[i]),0)/(2*total);
-  part(label,5,loss,1,'容量限制下尽量均分；绑定关系可能导致差异');
+  part(key,loss,1,'容量限制下尽量均分；绑定关系可能导致差异');
  }
- const max=components.reduce((n,c)=>n+c.max,0),rawScore=Math.round(100*components.reduce((n,c)=>n+c.score,0)/max),errors=issues.filter(i=>i.severity==='error').length;
- const score=rows.length?Math.min(rawScore,errors?59:100):0;
- return {score,rawScore,status:errors?'有必须修正的问题':score>=90?'规则检查良好':score>=70?'可优化':'建议调整',issues,components,groups:groupResults,matched:assignments.size,rows:rows.length,scope,missing:missing.length,errors,covered:covered.size};
+ const max=components.reduce((n,c)=>n+c.max,0),rawScore=max?Math.round(100*components.reduce((n,c)=>n+c.score,0)/max):null,errors=issues.filter(i=>i.severity==='error').length;
+ const score=max?(rows.length?Math.min(rawScore,errors?59:100):0):null;
+ return {score,rawScore,weights:scoringWeights,weightTotal:max,status:!max?'当前可检查项权重均为 0，请调整权重':errors?'有必须修正的问题':score>=90?'规则检查良好':score>=70?'可优化':'建议调整',issues,components,groups:groupResults,matched:assignments.size,rows:rows.length,scope,missing:missing.length,errors,covered:covered.size};
 }
-root.Verification={infer,headerIndex,groupMatches,records,audit};
+root.Verification={criteria,defaultWeights,weights,validateWeights,infer,headerIndex,groupMatches,records,audit};
 })(typeof module==='object'?module.exports:globalThis);
