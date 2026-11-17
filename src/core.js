@@ -6,8 +6,8 @@ const uid=()=>globalThis.crypto?.randomUUID?.()||'id-'+Date.now().toString(36)+'
 const normalize=x=>String(x??'').trim();
 const CATS={internal:'内部人员',team:'团体人员',couple:'情侣人员',family:'家属人员',normal:'普通人员'};
 function blank(){return {version:1,name:'新活动',people:[],groups:[],sources:[],distinct:[],confirmed:{},teamDone:[],stage:'import',revision:0};}
-function person(data={}){return {id:uid(),name:'',student:'',email:'',cat:'normal',autoCoupleFrom:'',photo:false,run:false,teams:[],pairs:[],familyName:'',familyTarget:null,partnerName:'',partnerTarget:null,group:null,reserve:false,independent:false,area:false,locked:false,raw:{},origins:[],...data};}
-function upgradeRelations(s){const upgrade=p=>{if(!Object.prototype.hasOwnProperty.call(p,'partnerName')){p.partnerName=p.cat==='couple'?(p.familyName||''):'';p.partnerTarget=p.cat==='couple'?(p.familyTarget||null):null;if(p.cat==='couple'){p.familyName='';p.familyTarget=null}}p.partnerTarget??=null};s.people.forEach(upgrade);(s.sources||[]).forEach(src=>{if(src.type!=='groups')(src.records||[]).forEach(upgrade)});return s}
+function person(data={}){return {id:uid(),name:'',student:'',email:'',cat:'normal',autoCoupleFrom:'',photo:false,run:false,teams:[],pairs:[],familyName:'',familyTarget:null,familyTogether:null,partnerName:'',partnerTarget:null,group:null,reserve:false,independent:false,area:false,locked:false,raw:{},origins:[],...data};}
+function upgradeRelations(s){const upgrade=p=>{p.familyTogether??=null;if(!Object.prototype.hasOwnProperty.call(p,'partnerName')){p.partnerName=p.cat==='couple'?(p.familyName||''):'';p.partnerTarget=p.cat==='couple'?(p.familyTarget||null):null;if(p.cat==='couple'){p.familyName='';p.familyTarget=null}}p.partnerTarget??=null};s.people.forEach(upgrade);(s.sources||[]).forEach(src=>{if(src.type!=='groups')(src.records||[]).forEach(upgrade)});return s}
 function duplicateSets(s){
  const parent=new Map(s.people.map(p=>[p.id,p.id])),members=new Map(s.people.map(p=>[p.id,[p.id]]));
  const find=id=>parent.get(id)===id?id:find(parent.get(id));
@@ -26,19 +26,22 @@ function duplicateSets(s){
  return [...buckets.values()].filter(rows=>rows.length>1);
 }
 function markDistinct(s,ids){for(let i=0;i<ids.length;i++)for(let j=i+1;j<ids.length;j++)s.distinct.push([ids[i],ids[j]].sort().join('|'));s.distinct=[...new Set(s.distinct)];}
-function merge(s,ids,keepId,relations=true){upgradeRelations(s);const rows=s.people.filter(p=>ids.includes(p.id)),keep=rows.find(p=>p.id===keepId);if(!keep)throw Error('请选择保留记录');if(s.distinct.some(key=>{const [a,b]=key.split('|');return ids.includes(a)&&ids.includes(b)}))throw Error('这些记录已确认是不同的人，不能合并');if(relations){for(const key of ['familyName','partnerName']){const names=[...new Set(rows.map(p=>p[key]).filter(Boolean))];if(names.length>1)throw Error(keep.name+'：重复记录存在不同的'+(key==='partnerName'?'伴侣':'家属关联')+'姓名，请先编辑确认')}}keep.photo=rows.some(p=>p.photo);keep.run=rows.some(p=>p.run);keep.origins=rows.flatMap(p=>p.origins);if(relations){keep.teams=[...new Set(rows.flatMap(p=>p.teams))];keep.pairs=[...new Set(rows.flatMap(p=>p.pairs))];for(const prefix of ['family','partner']){const linked=rows.find(p=>p[prefix+'Name']||p[prefix+'Target']);if(linked&&!keep[prefix+'Name']&&!keep[prefix+'Target']){keep[prefix+'Name']=linked[prefix+'Name'];keep[prefix+'Target']=linked[prefix+'Target']}}}s.people.forEach(p=>{for(const field of ['familyTarget','partnerTarget'])if(ids.includes(p[field]))p[field]=keepId});s.people=s.people.filter(p=>!ids.includes(p.id)||p.id===keepId);s.distinct=[...new Set(s.distinct.map(key=>key.split('|').map(id=>ids.includes(id)?keepId:id).sort()).filter(([a,b])=>a!==b).map(ids=>ids.join('|')))];}
-function units(s){upgradeRelations(s);const map=new Map(s.people.map(p=>[p.id,p.id]));const find=x=>map.get(x)===x?x:(map.set(x,find(map.get(x))),map.get(x));const join=(a,b)=>{if(map.has(a)&&map.has(b))map.set(find(b),find(a))};const keys=new Map();s.people.forEach(p=>{[...p.teams.map(t=>'t:'+t),...p.pairs.map(t=>'p:'+t)].forEach(k=>{if(keys.has(k))join(p.id,keys.get(k));else keys.set(k,p.id)});if(p.familyTarget)join(p.id,p.familyTarget);if(p.partnerTarget)join(p.id,p.partnerTarget)});const result=new Map();s.people.forEach(p=>{let key=find(p.id);if(!result.has(key))result.set(key,[]);result.get(key).push(p)});return [...result.values()];}
+function merge(s,ids,keepId,relations=true){upgradeRelations(s);const rows=s.people.filter(p=>ids.includes(p.id)),keep=rows.find(p=>p.id===keepId);if(!keep)throw Error('请选择保留记录');if(s.distinct.some(key=>{const [a,b]=key.split('|');return ids.includes(a)&&ids.includes(b)}))throw Error('这些记录已确认是不同的人，不能合并');const familyTogether=relations?familyChoice(rows):keep.familyTogether;if(relations){for(const key of ['familyName','partnerName']){const names=[...new Set(rows.map(p=>p[key]).filter(Boolean))];if(names.length>1)throw Error(keep.name+'：重复记录存在不同的'+(key==='partnerName'?'伴侣':'家属关联')+'姓名，请先编辑确认')}}keep.familyTogether=familyTogether;keep.photo=rows.some(p=>p.photo);keep.run=rows.some(p=>p.run);keep.origins=rows.flatMap(p=>p.origins);if(relations){keep.teams=[...new Set(rows.flatMap(p=>p.teams))];keep.pairs=[...new Set(rows.flatMap(p=>p.pairs))];for(const prefix of ['family','partner']){const linked=rows.find(p=>p[prefix+'Name']||p[prefix+'Target']);if(linked&&!keep[prefix+'Name']&&!keep[prefix+'Target']){keep[prefix+'Name']=linked[prefix+'Name'];keep[prefix+'Target']=linked[prefix+'Target']}}}s.people.forEach(p=>{for(const field of ['familyTarget','partnerTarget'])if(ids.includes(p[field]))p[field]=keepId});s.people=s.people.filter(p=>!ids.includes(p.id)||p.id===keepId);s.distinct=[...new Set(s.distinct.map(key=>key.split('|').map(id=>ids.includes(id)?keepId:id).sort()).filter(([a,b])=>a!==b).map(ids=>ids.join('|')))];}
+// A family relationship remains in the roster even when same-position binding is declined.
+function familyBinding(s,p){return p.familyTogether!==false&&(!p.familyTarget||s.people.find(x=>x.id===p.familyTarget)?.familyTogether!==false)}
+function familyChoice(rows){const values=[...new Set(rows.map(p=>p.familyTogether).filter(v=>typeof v==='boolean'))];if(values.length>1)throw Error('重复记录的“是否与家属分到一组”答案冲突，请先编辑确认');return values[0]??null}
+function units(s){upgradeRelations(s);const map=new Map(s.people.map(p=>[p.id,p.id]));const find=x=>map.get(x)===x?x:(map.set(x,find(map.get(x))),map.get(x));const join=(a,b)=>{if(map.has(a)&&map.has(b))map.set(find(b),find(a))};const keys=new Map();s.people.forEach(p=>{[...p.teams.map(t=>'t:'+t),...p.pairs.map(t=>'p:'+t)].forEach(k=>{if(keys.has(k))join(p.id,keys.get(k));else keys.set(k,p.id)});if(p.familyTarget&&familyBinding(s,p))join(p.id,p.familyTarget);if(p.partnerTarget)join(p.id,p.partnerTarget)});const result=new Map();s.people.forEach(p=>{let key=find(p.id);if(!result.has(key))result.set(key,[]);result.get(key).push(p)});return [...result.values()];}
 function relationIssues(s){upgradeRelations(s);const issues=[],pairs=new Map(),partners=new Map(s.people.map(p=>[p.id,new Set()]));
  const add=(message,ps)=>issues.push({message,ids:ps.map(p=>p.id)}),edge=(a,b)=>{if(partners.has(a)&&partners.has(b)){partners.get(a).add(b);partners.get(b).add(a)}};
  s.people.forEach(p=>{p.pairs.forEach(k=>{if(!pairs.has(k))pairs.set(k,[]);pairs.get(k).push(p)});
- if(p.cat==='family'&&!p.familyName&&!p.familyTarget)add(p.name+'：缺少关联志愿者',[p]);
- for(const [prefix,label] of [['family','家属关联'],['partner','伴侣']]){const name=p[prefix+'Name'],target=p[prefix+'Target'];if(name&&!target)add(p.name+'：请确认'+label+'“'+name+'”',[p,...s.people.filter(x=>x.name===name)]);if(target&&!partners.has(target))add(p.name+'：'+label+'人员不存在',[p]);if(target===p.id)add(p.name+'：不能关联自己',[p])}
+ if(p.cat==='family'&&familyBinding(s,p)&&!p.familyName&&!p.familyTarget)add(p.name+'：缺少关联志愿者',[p]);
+ for(const [prefix,label] of [['family','家属关联'],['partner','伴侣']]){if(prefix==='family'&&!familyBinding(s,p))continue;const name=p[prefix+'Name'],target=p[prefix+'Target'];if(name&&!target)add(p.name+'：请确认'+label+'“'+name+'”',[p,...s.people.filter(x=>x.name===name)]);if(target&&!partners.has(target))add(p.name+'：'+label+'人员不存在',[p]);if(target===p.id)add(p.name+'：不能关联自己',[p])}
  if(p.partnerTarget)edge(p.id,p.partnerTarget);if(p.cat==='team'&&!p.teams.length)add(p.name+'：缺少团体名称',[p]);});
  pairs.forEach((ps,key)=>{if(ps.length!==2)add('情侣编号 '+key+'：应为2人，实际'+ps.length+'人',ps);else edge(ps[0].id,ps[1].id)});
  s.people.forEach(p=>{const peers=partners.get(p.id);if(p.cat==='couple'&&!p.pairs.length&&!p.partnerName&&!p.partnerTarget&&!peers.size)add(p.name+'：请填写关联志愿者姓名或配对编号',[p]);if(peers.size>1)add(p.name+'：关联了多位伴侣，请检查姓名或配对编号',[p,...s.people.filter(x=>peers.has(x.id))])});return issues;
 }
 function relationErrors(s){return [...new Set(relationIssues(s).map(i=>i.message))]}
-function issueIds(s){const ids=new Set(relationIssues(s).flatMap(i=>i.ids)),us=units(s);let changed=true;while(changed){const before=ids.size;us.forEach(u=>{if(u.some(p=>ids.has(p.id)))u.forEach(p=>ids.add(p.id))});s.people.forEach(p=>{for(const prefix of ['partner','family'])if(p[prefix+'Name']){const peers=s.people.filter(x=>x.name===p[prefix+'Name']);if(ids.has(p.id)||peers.some(x=>ids.has(x.id))){ids.add(p.id);peers.forEach(x=>ids.add(x.id))}}});changed=ids.size!==before}return ids}
+function issueIds(s){const ids=new Set(relationIssues(s).flatMap(i=>i.ids)),us=units(s);let changed=true;while(changed){const before=ids.size;us.forEach(u=>{if(u.some(p=>ids.has(p.id)))u.forEach(p=>ids.add(p.id))});s.people.forEach(p=>{for(const prefix of ['partner','family'])if((prefix!=='family'||familyBinding(s,p))&&p[prefix+'Name']){const peers=s.people.filter(x=>x.name===p[prefix+'Name']);if(ids.has(p.id)||peers.some(x=>ids.has(x.id))){ids.add(p.id);peers.forEach(x=>ids.add(x.id))}}});changed=ids.size!==before}return ids}
 function deferIssues(s){const ids=issueIds(s);s.people.forEach(p=>{if(ids.has(p.id)){p.deferred=true;p.group=null;p.reserve=false;p.independent=false;p.locked=false}});s.groups.forEach(g=>{if(ids.has(g.leader))g.leader=null;if(ids.has(g.area))g.area=null});return ids.size}
 function refreshDeferred(s){const ids=issueIds(s);s.people.forEach(p=>{if(p.deferred&&!ids.has(p.id))p.deferred=false})}
 function syncCoupleCategories(s){upgradeRelations(s);const peers=new Map(s.people.map(p=>[p.id,new Set()])),invalid=new Set(),pairs=new Map();const join=(a,b)=>{if(a===b||!peers.has(b)){invalid.add(a);return}peers.get(a).add(b);peers.get(b).add(a)};
@@ -69,16 +72,16 @@ function placeLeaders(s){
 function updatePerson(s,id,patch){
  const p=s.people.find(p=>p.id===id);if(!p)throw Error('人员不存在');
  const before=copy(p),oldUnit=copy(units(s).find(u=>u.some(p=>p.id===id))||[p]);
- const allowed=['name','student','email','cat','teams','pairs','photo','run','partnerTarget','partnerName','familyTarget','familyName'];
+ const allowed=['name','student','email','cat','teams','pairs','photo','run','partnerTarget','partnerName','familyTarget','familyName','familyTogether'];
  const next={...p,...Object.fromEntries(allowed.filter(k=>Object.hasOwn(patch,k)).map(k=>[k,patch[k]]))};
- if(!normalize(next.name))throw Error('姓名不能为空');if(!CATS[next.cat])throw Error('人员类别无效');
+ if(next.familyTogether!==null&&typeof next.familyTogether!=='boolean')throw Error('家属同组选项无效');if(!normalize(next.name))throw Error('姓名不能为空');if(!CATS[next.cat])throw Error('人员类别无效');
  if(next.cat!=='internal'&&s.groups.some(g=>g.leader===id||g.area===id))throw Error('请先在任职页取消该人员的任职，再修改类别');
  const changed=allowed.filter(k=>JSON.stringify(before[k])!==JSON.stringify(next[k]));if(!changed.length)return {changed:false,affected:[]};
  if(next.cat!==p.cat)next.autoCoupleFrom='';Object.assign(p,next);
  if(changed.every(k=>k==='email'))return {changed:true,affected:[id],allocationChanged:false};
  if(changed.includes('name'))s.people.forEach(x=>{for(const prefix of ['partner','family'])if(x[prefix+'Target']===id)x[prefix+'Name']=p.name});
  resolveFamily(s);refreshDeferred(s);
- const relationKeys=['teams','pairs','partnerTarget','partnerName','familyTarget','familyName'];
+ const relationKeys=['teams','pairs','partnerTarget','partnerName','familyTarget','familyName','familyTogether'];
  const allocationChanged=changed.some(k=>k==='cat'||relationKeys.includes(k));
  if(changed.some(k=>['name','student','cat',...relationKeys].includes(k)))delete s.confirmed.dedup;
  if(changed.some(k=>k!=='email'))delete s.confirmed.overview;
@@ -137,6 +140,7 @@ function removeSources(state,sourceIds){
    for(const prefix of ['family','partner'])if(p[prefix+'Name']&&oldRecords.some(r=>r[prefix+'Name']===p[prefix+'Name'])&&!remainingRecords.some(r=>r[prefix+'Name']===p[prefix+'Name'])){p[prefix+'Name']='';p[prefix+'Target']=null}
    p.origins=remaining;
   }
+  if(removed.has(oldPrimary)||oldRecords.some(r=>r.familyTogether===p.familyTogether&&typeof p.familyTogether==='boolean'))p.familyTogether=familyChoice(remainingRecords);
   return [p];
  });
  const groupSources=sourceIds.map(id=>sources.get(id)).filter(src=>src.type==='groups');
@@ -182,5 +186,5 @@ function remainingPlan(state){
  return {state:s,steps,notes,pending:s.people.filter(p=>!p.group&&!p.reserve&&!p.independent).length};
 }
 
-root.V={sourceOrder,withdraw,restoreWithdrawn,remainingPlan,deleteGroup,updatePerson,copy,uid,normalize,upgradeRelations,syncCoupleCategories,CATS,blank,person,duplicateSets,markDistinct,merge,units,relationIssues,issueIds,deferIssues,refreshDeferred,relationErrors,resolveFamily,roleErrors,validate,placeLeaders,eligible,allocate,move,swap,validateFile,removeSources};
+root.V={familyBinding,sourceOrder,withdraw,restoreWithdrawn,remainingPlan,deleteGroup,updatePerson,copy,uid,normalize,upgradeRelations,syncCoupleCategories,CATS,blank,person,duplicateSets,markDistinct,merge,units,relationIssues,issueIds,deferIssues,refreshDeferred,relationErrors,resolveFamily,roleErrors,validate,placeLeaders,eligible,allocate,move,swap,validateFile,removeSources};
 })(typeof module==='object'?module.exports:globalThis);
