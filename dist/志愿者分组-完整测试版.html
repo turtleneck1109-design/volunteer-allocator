@@ -620,7 +620,7 @@ async function play(before,after,{label,chipHtml}){
  const sources=new Map(transfers.map(t=>[t.person.id,sourceFor(t.person.id)]));
  const locations=[...new Set(transfers.map(t=>t.from))];
  const sides=locations.map(loc=>transfers.filter(t=>t.from===loc));
- const inPlace=transfers.length<=6&&sides[0].length===sides[1].length&&transfers.every(t=>visible(sources.get(t.person.id)));
+ const inPlace=transfers.length===2&&sides[0].length===sides[1].length&&transfers.every(t=>visible(sources.get(t.person.id)));
  const makeChip=p=>{const box=document.createElement('div');box.innerHTML=chipHtml(p);const chip=box.firstElementChild;chip.removeAttribute('onclick');chip.removeAttribute('onkeydown');chip.removeAttribute('data-person');chip.removeAttribute('draggable');chip.removeAttribute('role');chip.removeAttribute('aria-checked');chip.setAttribute('tabindex','-1');chip.removeAttribute('aria-pressed');chip.classList.remove('chosen');chip.querySelector('.selected-check')?.remove();chip.setAttribute('aria-hidden','true');return chip;};
  const finish=()=>{skip=true;animations.forEach(a=>{try{a.finish()}catch{a.cancel()}})};
  try{
