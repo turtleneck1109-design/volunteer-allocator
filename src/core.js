@@ -125,7 +125,31 @@ function allocate(s,stage,team='',seed=Date.now(),tries=80){
 function unlockOverview(s){s.people.forEach(p=>p.locked=false);s.overviewEditing=true;delete s.confirmed.overview;s.stage='overview'}
 function finalizeOverview(s){const errors=[...roleErrors(s),...relationErrors(s),...familyAdmissionErrors(s),...validate(s,true)];if(duplicateSets(s).length)errors.unshift('还有重复记录需要确认');if(errors.length)throw Error([...new Set(errors)].join('\n'));s.people.forEach(p=>p.locked=true);s.overviewEditing=false;s.confirmed.overview=true;s.stage='overview'}
 function move(s,selected,target,anchor=null,after=false){const us=units(s),ids=new Set(us.filter(u=>u.some(p=>selected.includes(p.id))).flatMap(u=>u.map(p=>p.id))),moving=s.people.filter(p=>ids.has(p.id));if(!moving.length)throw Error('请选择人员');if(moving.some(p=>p.deferred))throw Error('请先修复待处理人员的关联，再移动');if(anchor&&ids.has(anchor))return false;const destination=p=>p.group||(p.reserve?'reserve':p.independent?'independent':'pending');const reorder=moving.every(p=>destination(p)===target);if(!reorder&&moving.some(p=>p.locked))throw Error('包含锁定人员，请先解锁');if(moving.some(p=>s.groups.some(g=>g.leader===p.id&&!s.groups.some(project=>project.id===target&&normalize(project.no)===normalize(g.no)&&project.leader===p.id))))throw Error('组长只能留在指定小组');if(moving.some(p=>p.independent)&&target!=='independent')throw Error('请先将独立区长改为编入小组');const g=s.groups.find(g=>g.id===target);if(!g&&!['pending','reserve'].includes(target))throw Error('目标小组不存在');if(target==='reserve'&&moving.some(p=>p.cat==='family'))throw Error('家属须录取为正式志愿者，不能移入储备');if(g&&s.people.filter(p=>p.group===target&&!ids.has(p.id)).length+moving.length>g.cap)throw Error('目标组容量不足，未移动任何人');let remaining=s.people.filter(p=>!ids.has(p.id)),index=anchor?remaining.findIndex(p=>p.id===anchor):remaining.reduce((r,p,i)=>destination(p)===target?i+1:r,-1);if(anchor&&index<0)throw Error('排序目标不存在');if(anchor&&after)index++;if(index<0)index=remaining.length;moving.forEach(p=>{p.group=g?.id||null;p.reserve=target==='reserve';if(!reorder)p.locked=!s.overviewEditing;});s.people=[...remaining.slice(0,index),...moving,...remaining.slice(index)];delete s.confirmed.overview;return true;}
-function swap(s,selected,other){const a=units(s).filter(u=>u.some(p=>selected.includes(p.id))).flat(),b=units(s).find(u=>u.some(p=>p.id===other));if(!a.length||!b)throw Error('请选择交换对象');if(a.some(p=>b.some(q=>q.id===p.id)))throw Error('不能与同一绑定组合交换');const pos=p=>p.group||(p.reserve?'reserve':'pending'),apos=new Set(a.map(pos)),bpos=new Set(b.map(pos));if(apos.size!==1||bpos.size!==1)throw Error('所选人员必须来自同一位置');const ga=[...apos][0],gb=[...bpos][0];if(ga===gb)throw Error('请选择另一个组或储备区');if([...a,...b].some(p=>p.deferred||p.locked||p.independent||s.groups.some(g=>g.leader===p.id)))throw Error('不能交换组长、独立区长或锁定人员');const changed=copy(s);const aset=new Set(a.map(p=>p.id)),bset=new Set(b.map(p=>p.id));changed.people.forEach(p=>{let target=aset.has(p.id)?gb:bset.has(p.id)?ga:null;if(target){p.group=['pending','reserve'].includes(target)?null:target;p.reserve=target==='reserve';p.locked=!changed.overviewEditing;}});const errors=validate(changed);if(errors.length)throw Error(errors.join('\n'));s.people=[...changed.people.filter(p=>!aset.has(p.id)&&!bset.has(p.id)),...changed.people.filter(p=>aset.has(p.id)||bset.has(p.id))];delete s.confirmed.overview;}
+function swap(s,selected,other){
+ const changed=copy(s),allUnits=units(changed),pos=p=>p.group||(p.reserve?'reserve':'pending');
+ const chosen=allUnits.filter(u=>u.some(p=>selected.includes(p.id)));let a,b;
+ if(other!==undefined){a=chosen.flat();b=allUnits.find(u=>u.some(p=>p.id===other));}
+ else{
+  if(!chosen.length)throw Error('请先在两个小组中选择要交换的人员');
+  if(chosen.some(u=>new Set(u.map(pos)).size!==1))throw Error('绑定成员分散在不同位置，请先调整到同一组再交换');
+  const positions=[...new Set(chosen.flat().map(pos))];
+  if(positions.length!==2)throw Error(positions.length<2?'请再选择另一个小组中的人员，然后点击交换':'一次只能交换两个小组中的人员，请取消多余小组的选择');
+  a=chosen.flat().filter(p=>pos(p)===positions[0]);b=chosen.flat().filter(p=>pos(p)===positions[1]);
+ }
+ if(!a?.length||!b?.length)throw Error('请选择交换对象');
+ if(a.some(p=>b.some(q=>q.id===p.id)))throw Error('不能与同一绑定组合交换');
+ const apos=new Set(a.map(pos)),bpos=new Set(b.map(pos));
+ if(apos.size!==1||bpos.size!==1)throw Error('所选人员必须来自同一位置');
+ const ga=[...apos][0],gb=[...bpos][0];if(ga===gb)throw Error('请选择另一个组或储备区');
+ if([...a,...b].some(p=>p.deferred))throw Error('包含待处理人员，请先修复关联再交换');
+ if([...a,...b].some(p=>p.locked))throw Error('包含锁定人员，请先解锁再交换');
+ if([...a,...b].some(p=>p.independent||changed.groups.some(g=>g.leader===p.id)))throw Error('不能交换组长或独立区长，请在任职页面调整');
+ const aset=new Set(a.map(p=>p.id)),bset=new Set(b.map(p=>p.id));
+ changed.people.forEach(p=>{const target=aset.has(p.id)?gb:bset.has(p.id)?ga:null;if(target){p.group=['pending','reserve'].includes(target)?null:target;p.reserve=target==='reserve';p.locked=!changed.overviewEditing;}});
+ const errors=validate(changed);if(errors.length)throw Error(errors.join('\n'));
+ s.people=[...changed.people.filter(p=>!aset.has(p.id)&&!bset.has(p.id)),...changed.people.filter(p=>aset.has(p.id)||bset.has(p.id))];delete s.confirmed.overview;
+}
+
 function prepareGroups(s,rows){
  if(!Array.isArray(rows)||!rows.length)throw Error('请至少添加一个小组');
  return rows.map((row,i)=>{const no=normalize(row.no),name=normalize(row.name),cap=Number(row.cap),region=normalize(row.region);
