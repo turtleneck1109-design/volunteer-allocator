@@ -16,7 +16,7 @@ async function suggest(reference,rows,scope,V,A,options={}){
  const targetName=id=>s.groups.find(g=>g.id===id)?s.groups.find(g=>g.id===id).no+'组 · '+s.groups.find(g=>g.id===id).name:id==='reserve'?'储备':'独立区长';
  const budget=options.budget??1200,limit=options.limit??3,seen=new Set();let scans=0;
  const canGo=(u,target)=>{
-  if(target==='reserve')return u.every(p=>p.cat==='normal'||p.cat==='family')&&!u.some(p=>s.groups.some(g=>g.leader===p.id));
+  if(target==='reserve')return u.every(p=>p.cat==='normal')&&!u.some(p=>s.groups.some(g=>g.leader===p.id));
   const g=s.groups.find(g=>g.id===target);return !!g&&u.every(p=>s.groups.filter(x=>x.leader===p.id).every(role=>norm(role.no)===norm(g.no)));
  };
  async function consider(changes){

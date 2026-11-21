@@ -50,6 +50,7 @@ function audit(reference,rows,scope,V,customWeights=reference.verificationWeight
  const expected=s.people.filter(p=>!p.independent);const missing=scope==='all'?expected.filter(p=>!assignments.has(p.id)):[];
  missing.forEach(p=>add('error','遗漏人员',p.name+'（'+(p.student||'无学号')+'）未在上传名单中；储备人员也应提交'));
  identityFaults+=missing.length;
+ s.people.filter(p=>p.cat==='family').forEach(p=>{const assigned=assignments.get(p.id);if(assigned&&!s.groups.some(g=>g.id===assigned.target)){identityFaults++;add('error','家属未正式录取',p.name+' 必须安排正式岗位，不能放入储备或独立管理',assigned.source)}});
  const relationProblems=V.relationIssues(s).filter(i=>scope==='all'||i.ids.some(id=>assignments.has(id)));relationProblems.forEach(i=>add('error','原始关联待处理',i.message));
  const units=V.units(s).filter(u=>u.length>1);let broken=0;
  units.forEach(u=>{const places=u.map(p=>assignments.get(p.id)?.target).filter(Boolean);if(!places.length)return;

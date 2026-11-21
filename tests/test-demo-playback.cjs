@@ -8,7 +8,7 @@ const run=code=>vm.runInContext(code,ctx),json=code=>JSON.parse(run(`JSON.string
 (async()=>{
  run(`globalThis.scene=buildDemoScene('allocate');globalThis.plan=Demo.playbackPlan(scene.state,V)`);
  assert.equal(json('plan.total'),48);assert.equal(json('plan.initial.people.filter(p=>p.group||p.reserve).length'),0);
- assert.deepEqual(json('plan.steps.map(s=>s.label)'),['组长与家属','内部','星火学生会','青禾志愿队','情侣','普通','储备']);
+ assert.deepEqual(json('plan.steps.map(s=>s.label)'),['组长与家属','内部与家属','星火学生会','青禾志愿队','情侣','普通','储备']);
  assert.equal(new Set(json('plan.steps.flatMap(s=>s.moves.flatMap(m=>m.ids))')).size,48);
  run(`S=V.copy(plan.initial);globalThis.applied=[];for(const step of plan.steps){for(const move of step.moves){applyDemoMove(move,step.state);applied.push(...move.ids);if(S.groups.some(g=>S.people.filter(p=>p.group===g.id).length>g.cap))throw Error('超出容量')}S=V.copy(step.state);if(V.validate(S).length)throw Error(V.validate(S).join(';'))}`);
  assert.equal(json('S.people.filter(p=>p.group).length'),42);assert.equal(json('S.people.filter(p=>p.reserve).length'),6);

@@ -8,7 +8,7 @@ function fixture(){
 }
 const s=fixture(),before=JSON.stringify(s),plan=AllocationPlayback.remaining(s,V);
 assert.equal(JSON.stringify(s),before);assert.equal(plan.total,17);
-assert.deepEqual(plan.steps.map(s=>s.label),['内部','团体A','情侣','普通','储备']);
+assert.deepEqual(plan.steps.map(s=>s.label),['内部与家属','团体A','情侣','普通','储备']);
 assert.deepEqual(V.validate(plan.final,true),[]);
 assert(plan.final.people.filter(p=>['l1','l2','n0'].includes(p.id)).every(p=>p.group===s.people.find(x=>x.id===p.id).group));
 assert(plan.steps.every(step=>step.moves.every(move=>!move.ids.includes('n0'))));
