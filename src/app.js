@@ -387,7 +387,7 @@ function exportRowRule(p){
 }
 function exportRowAttributes(p){const rule=exportRowRule(p);return rule?` class="export-colored-row" style="--export-row-fill:#${rule[2]}" title="${rule[1]}"`:''}
 function setExportRowColors(on){checkpoint();S.exportRowColors=!!on;rememberExport();renderExport();$('exportRowColors')?.focus({preventScroll:true})}
-function exportColorControls(){return `<div class="export-color-controls"><label><input id="exportRowColors" type="checkbox" ${S.exportRowColors?'checked':''} onchange="setExportRowColors(this.checked)">整行颜色标识</label><span class="subtext">普通志愿者无特殊身份时不填色</span>${S.exportRowColors?`<details><summary>颜色图例与优先级</summary><div class="export-color-legend">${exportColorRules.map(([,label,color])=>`<span><i style="background:#${color}"></i>${label}</span>`).join('')}</div><p class="subtext">兼具多种身份时：区长 ＞ 小组长 ＞ 摄影＋小闪电 ＞ 摄影 ＞ 小闪电 ＞ 来源类别。颜色不改变人员信息。</p></details>`:''}</div>`}
+function exportColorControls(){return `<div class="export-color-controls"><label><input id="exportRowColors" type="checkbox" ${S.exportRowColors?'checked':''} onchange="setExportRowColors(this.checked)">整行颜色标识</label><span class="subtext">普通志愿者无特殊身份时不填色 · 表尾附颜色说明</span>${S.exportRowColors?`<details><summary>颜色图例与优先级</summary><div class="export-color-legend">${exportColorRules.map(([,label,color])=>`<span><i style="background:#${color}"></i>${label}</span>`).join('')}</div><p class="subtext">兼具多种身份时：区长 ＞ 小组长 ＞ 摄影＋小闪电 ＞ 摄影 ＞ 小闪电 ＞ 来源类别。颜色不改变人员信息。</p></details>`:''}</div>`}
 // SheetJS CE preserves data but doesn't write fills. Add only row fills to its generated OOXML ZIP.
 function writeExportWorkbook(wb){
  const bytes=new Uint8Array(XLSX.write(wb,{bookType:'xlsx',type:'array'}));
@@ -463,7 +463,22 @@ function reorderedColumns(cols,key,target,after){if(key===target||!cols.includes
 function dropColumnDrag(event,index){if(draggedColumn===null)return;event.preventDefault();const rect=event.currentTarget.getBoundingClientRect(),key=draggedColumn;exportCols=reorderedColumns(exportCols,key,exportCols[index],event.clientX>=rect.left+rect.width/2);endColumnDrag();rememberExport();renderExport();document.querySelectorAll('.export-column-tag')[exportCols.indexOf(key)]?.focus({preventScroll:true})}
 function shiftColumn(i,d){if(i+d<0||i+d>=exportCols.length)return;[exportCols[i],exportCols[i+d]]=[exportCols[i+d],exportCols[i]];rememberExport();renderExport()}
 function outputSheet(g,reserve=false,withdrawn=false){return withExportData(()=>outputSheetWithData(g,reserve,withdrawn))}
-function outputSheetWithData(g,reserve=false,withdrawn=false){const ps=withdrawn?(S.withdrawn||[]):S.people.filter(p=>reserve?p.reserve:p.group===g.id);const header=exportCols.map(k=>exportColumnLabel(k)),rows=[[S.name],[withdrawn?'放弃参加名单':reserve?'储备名单':g.no+'组 · '+g.name],['导出时间：'+now()],...((reserve||withdrawn)?[]:[['小组长：'+(personOf(g.leader)?.name||'未设置')+'　区长：'+(personOf(g.area)?.name||'未设置')]]),[],header,...ps.map(p=>exportCols.map(k=>String(columnValue(p,k))))];const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=header.map(()=>({wch:20}));const start=(reserve||withdrawn)?4:5;if(S.exportRowColors)ws['!exportRowColors']=Object.fromEntries(ps.map((p,i)=>[start+i+2,exportRowRule(p)?.[2]||'']));ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:start,c:0},e:{r:rows.length-1,c:Math.max(0,header.length-1)}})};return ws}
+function appendExportColorLegend(rows,colors,width){
+ const names={area:'紫色',leader:'黄色',photoRun:'青绿色',photo:'浅绿色',run:'浅橙色',internal:'浅蓝色',team:'浅紫色',couple:'浅粉色',family:'浅杏色'};
+ rows.push([],['颜色说明']);
+ exportColorRules.forEach(([key,label,color])=>{const row=Array(Math.max(1,width)).fill('');row[0]=names[key]+'：'+label;rows.push(row);colors[rows.length]=color});
+ rows.push(['无填色：普通志愿者（无特殊身份）'],[],['多种身份按以下顺序优先着色：'],['区长 ＞ 小组长 ＞ 摄影＋小闪电'],['＞ 摄影 ＞ 小闪电 ＞ 来源类别']);
+}
+function outputSheetWithData(g,reserve=false,withdrawn=false){
+ const ps=withdrawn?(S.withdrawn||[]):S.people.filter(p=>reserve?p.reserve:p.group===g.id);
+ const header=exportCols.map(k=>exportColumnLabel(k)),rows=[[S.name],[withdrawn?'放弃参加名单':reserve?'储备名单':g.no+'组 · '+g.name],['导出时间：'+now()],...((reserve||withdrawn)?[]:[['小组长：'+(personOf(g.leader)?.name||'未设置')+'　区长：'+(personOf(g.area)?.name||'未设置')]]),[],header,...ps.map(p=>exportCols.map(k=>String(columnValue(p,k))))];
+ const start=(reserve||withdrawn)?4:5,lastPersonRow=rows.length-1,colors={};
+ if(S.exportRowColors){ps.forEach((p,i)=>colors[start+i+2]=exportRowRule(p)?.[2]||'');appendExportColorLegend(rows,colors,header.length)}
+ const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=header.map(()=>({wch:20}));
+ if(S.exportRowColors){ws['!exportRowColors']=colors;if(header.length>1)ws['!merges']=rows.flatMap((row,r)=>r>lastPersonRow&&row.length?[{s:{r,c:0},e:{r,c:header.length-1}}]:[])}
+ // Footer notes must never enter the roster filter/sort range.
+ if(ps.length)ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:start,c:0},e:{r:lastPersonRow,c:Math.max(0,header.length-1)}})};return ws;
+}
 function workbookFor(gs,withReserve=false,withWithdrawn=false){return withExportData(()=>workbookForWithData(gs,withReserve,withWithdrawn))}
 function workbookForWithData(gs,withReserve=false,withWithdrawn=false){if(exportCols.length>16384)throw Error('Excel 每张表最多 16,384 列，请减少所选字段');if(!exportCols.length)throw Error('至少选择一列');const wb=XLSX.utils.book_new();gs.forEach((g,i)=>{let name=(g.no+'组-'+g.name).replace(/[\\/?*\[\]:]/g,'_').slice(0,24)+'-'+(i+1);XLSX.utils.book_append_sheet(wb,outputSheet(g),name)});if(withReserve)XLSX.utils.book_append_sheet(wb,outputSheet(null,true),'储备名单');if(withWithdrawn)XLSX.utils.book_append_sheet(wb,outputSheet(null,false,true),'放弃参加名单');if(!wb.SheetNames.length)throw Error('请选择小组、储备或放弃参加名单');return writeExportWorkbook(wb)}
 function exportExcel(){return withExportData(()=>exportExcelWithData())}

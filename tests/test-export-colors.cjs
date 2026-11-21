@@ -10,13 +10,26 @@ const colors=['D8B4FE','FFE680','99E6D8','BAE6B5','FFD19A','CCE5FF','E1D5F5','FF
 colors.forEach((color,i)=>{for(const col of ['A','B','C','D','E'])assert.equal(ws[col+(i+7)].s.fgColor.rgb,color,`整行包括空白列 ${col}${i+7}`)});
 assert.equal(ws.A16.s.patternType,'none','无特殊身份普通人员不填色');assert.equal(ws.A6.s.patternType,'none','表头不误涂');assert.equal(ws.A7.v,'000area','前导零不变');assert.equal(ws['!autofilter'].ref,'A6:E16');
 assert.equal(wb.Sheets['储备名单'].A6.s.fgColor.rgb,'BAE6B5');assert.equal(wb.Sheets['放弃参加名单'].A6.s.fgColor.rgb,'E1D5F5');
+
+// Color notes are part of every sheet, below data and outside the filter range.
+function verifyLegend(sheet,lastDataRow,lastCol){
+ const rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',blankrows:true});
+ assert.equal(rows[lastDataRow+1][0],'颜色说明');
+ colors.forEach((color,i)=>{const row=lastDataRow+3+i;assert.equal(sheet['A'+row].s.fgColor.rgb,color);assert.equal(sheet[lastCol+row].s.fgColor.rgb,color)});
+ assert.equal(rows[lastDataRow+11][0],'无填色：普通志愿者（无特殊身份）');
+ assert.equal(sheet['A'+(lastDataRow+12)].s.patternType,'none');
+ assert(rows.at(-2)[0].includes('区长 ＞ 小组长'));assert(rows.at(-1)[0].includes('摄影 ＞ 小闪电 ＞ 来源类别'));
+}
+verifyLegend(ws,16,'E');assert(ws['!merges'].every(m=>m.s.r>15&&m.s.c===0&&m.e.c===4),'备注合并行不应影响人员数据');verifyLegend(wb.Sheets['储备名单'],6,'E');verifyLegend(wb.Sheets['放弃参加名单'],6,'E');
+assert.equal(wb.Sheets['储备名单']['!autofilter'].ref,'A5:E6');
 run(`renderExportContent();saveExportPreset('彩色名单');S.exportRowColors=false;checkpoint=()=>{};changed=()=>{};renderExport=()=>{};toast=()=>{};applyExportPreset(S.exportPresets[0].id);`);
 assert(run('S.exportRowColors'));assert(nodes.mainContent.innerHTML.includes('整行颜色标识'));assert.equal((nodes.mainContent.innerHTML.match(/class="export-colored-row"/g)||[]).length,11);
 assert(!run(`exportRowAttributes(S.people.find(p=>p.id==='normal'))`));run('S=JSON.parse(JSON.stringify(S));recoverExport()');assert(run('S.exportRowColors'));
 // Old presets intentionally restore the old uncolored output, without altering roster/column data.
 run(`S.exportPresets.push({id:'old',name:'旧方案',cols:['name','student'],mode:'book'});applyExportPreset('old')`);assert.equal(run('S.exportRowColors'),false);
 // Same writer covers per-group files and email attachments; reject no columns as before.
-run(`S.exportRowColors=true;exportCols=['name'];`);const one=XLSX.read(run('workbookFor([S.groups[0]])'),{type:'array',cellStyles:true});assert.equal(one.Sheets[one.SheetNames[0]].A7.s.fgColor.rgb,'D8B4FE');assert.equal(one.SheetNames.length,1);
+run(`S.exportRowColors=true;exportCols=['name'];`);const one=XLSX.read(run('workbookFor([S.groups[0]])'),{type:'array',cellStyles:true});assert.equal(one.Sheets[one.SheetNames[0]].A7.s.fgColor.rgb,'D8B4FE');assert.equal(one.SheetNames.length,1);verifyLegend(one.Sheets[one.SheetNames[0]],16,'A');
+run(`S.exportRowColors=false`);const plain=XLSX.read(run('workbookFor([S.groups[0]])'),{type:'array'});assert.equal(plain.Sheets[plain.SheetNames[0]]['!ref'],'A1:A16');assert(!XLSX.utils.sheet_to_json(plain.Sheets[plain.SheetNames[0]],{header:1}).flat().includes('颜色说明'));run(`S.exportRowColors=true;S.groups.push({id:'empty',no:'2',name:'空组',cap:3})`);const empty=XLSX.read(run('workbookFor([S.groups[1]])'),{type:'array',cellStyles:true});verifyLegend(empty.Sheets[empty.SheetNames[0]],6,'A');assert.equal(empty.Sheets[empty.SheetNames[0]]['!autofilter'],undefined);
 // Preserve pre-existing number formats when adding fills.
 run(`globalThis.styled=XLSX.utils.book_new();globalThis.sheet=XLSX.utils.aoa_to_sheet([[42],['普通']]);sheet.A1.z='0.00';sheet['!exportRowColors']={1:'FFE680'};XLSX.utils.book_append_sheet(styled,sheet,'格式');`);const fmt=XLSX.read(run('writeExportWorkbook(styled)'),{type:'array',cellStyles:true,cellNF:true}).Sheets['格式'];assert.equal(fmt.A1.z,'0.00');assert.equal(fmt.A1.v,42);assert.equal(fmt.A1.s.fgColor.rgb,'FFE680');assert.equal(fmt.A2.s.patternType,'none');
-console.log('通过：9类整行颜色、身份优先级、普通留白、空白单元格、前导零与原格式、储备/放弃名单、多表和单表、开关/预览/方案持久化。');
+console.log('通过：9类整行颜色、身份优先级、普通留白、空白单元格、前导零与原格式、储备/放弃名单、多表和单表、开关/预览/方案持久化；各表末尾颜色说明、单列/空名单兼容、筛选排除备注。');
