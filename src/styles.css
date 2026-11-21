@@ -180,3 +180,12 @@ dialog{max-height:88vh;padding:22px;width:840px}
 
 /* Relationship lookup keeps draft edits and focus in place. */
 .relation-picker{display:flex;flex-direction:column;gap:7px;flex:1;min-width:180px;font-size:12px}.relation-picker select{width:100%;max-width:none}.relation-picker small{color:var(--secondary,#78849a);min-height:16px}.formrow .family-attendance{margin:0;min-width:180px}.formrow .check-inline{display:flex;flex-direction:row;align-items:center;flex:0}.family-attendance [hidden]{display:none!important}#batchGroupCount{width:70px}#batchGroupRows input{width:100%;min-width:90px}#batchGroupRows [data-field="name"]{min-width:180px}#batchGroupRows [data-field="no"],#batchGroupRows [data-field="cap"]{max-width:100px}input:disabled,select:disabled{opacity:.55}
+
+/* The export preview shows Excel's light row colors in both application themes. */
+.export-color-controls{display:flex;align-items:center;gap:10px 18px;flex-wrap:wrap;margin:16px 0 22px}
+.export-color-controls>label{display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer}
+.export-color-controls details{flex-basis:100%;font-size:13px}
+.export-color-legend{display:flex;flex-wrap:wrap;gap:10px 18px;margin-top:12px}
+.export-color-legend span{display:inline-flex;align-items:center;gap:6px}
+.export-color-legend i{display:inline-block;width:16px;height:16px;border-radius:4px;border:1px solid #0002}
+.export-full-preview .export-colored-row td{background:var(--export-row-fill);color:#172033}
