@@ -12,9 +12,15 @@ rejects(s=>{s.people[0].pairs=['p'];s.people[2].pairs=['p']},['a','c'],/绑定�
 rejects(s=>{s.people[0].cat='family';s.people[2].group=null;s.people[2].reserve=true},['a','c'],/家属/);
 s=fixture();s.groups[1].cap=3;V.swap(s,['a','b','c']);assert.equal(s.people.filter(p=>p.group==='g2').length,3);
 s=fixture();s.overviewEditing=false;V.swap(s,['a','c']);assert(s.people.filter(p=>['a','c'].includes(p.id)).every(p=>p.locked));
-// UI swaps the two selections without opening a target dialog, and records one undo checkpoint.
-const ctx={V,fixture,console,document:{addEventListener(){}},window:{addEventListener(){}}};vm.createContext(ctx);vm.runInContext(fs.readFileSync('src/app.js','utf8').replace(/boot\(\);\s*$/,''),ctx);const run=c=>vm.runInContext(c,ctx);
-run(`render=()=>{};changed=()=>{};toast=()=>{};globalThis.lastError='';errorBox=e=>lastError=e.message;modal=()=>{throw Error('不应弹出目标选择')};S=fixture();selected=new Set(['a','c']);swapSelected()`);
+// Wait for the animation before committing, and keep one undo checkpoint.
+const ctx={V,fixture,console,SwapAnimation:{play:async()=>{}},document:{addEventListener(){}},window:{addEventListener(){}}};vm.createContext(ctx);vm.runInContext(fs.readFileSync('src/app.js','utf8').replace(/boot\(\);\s*$/,''),ctx);const run=c=>vm.runInContext(c,ctx);
+(async()=>{
+run(`render=()=>{};changed=()=>{};toast=()=>{};globalThis.lastError='';errorBox=e=>lastError=e.message;modal=()=>{throw Error('不应弹出目标选择')};S=fixture();selected=new Set(['a','c'])`);
+await run('swapSelected()');
 assert.equal(run(`S.people.find(p=>p.id==='a').group`),'g2');assert.equal(run('selected.size'),0);assert.equal(run('undoStack.length'),1);assert.equal(run(`undoStack[0].state.people.find(p=>p.id==='a').group`),'g1');
-run(`S=fixture();selected=new Set(['a','b','c']);globalThis.before=JSON.stringify(S);swapSelected()`);assert(run('lastError.includes("超出")'));assert(run('JSON.stringify(S)===before'));assert.equal(run('selected.size'),3);assert.equal(run('undoStack.length'),1);
-console.log('通过：选中双方直接交换、批量及绑定交换、满组同时校验、失败原子性、任职锁定保护、顺序与撤销。');
+run(`S=fixture();selected=new Set(['a','b','c']);globalThis.before=JSON.stringify(S)`);await run('swapSelected()');assert(run('lastError.includes("超出")'));assert(run('JSON.stringify(S)===before'));assert.equal(run('selected.size'),3);assert.equal(run('undoStack.length'),1);
+run(`S=fixture();selected=new Set(['a','c']);before=JSON.stringify(S);SwapAnimation.play=()=>new Promise(resolve=>globalThis.finishAnimation=resolve);globalThis.swapTask=swapSelected()`);
+assert(run('busy'));assert(run('JSON.stringify(S)===before'));assert.equal(run('undoStack.length'),1);await run('swapSelected()');assert.equal(run('undoStack.length'),1);run('finishAnimation()');await run('swapTask');assert(!run('busy'));assert.equal(run('undoStack.length'),2);assert.equal(run(`S.people.find(p=>p.id==='a').group`),'g2');
+run(`S=fixture();selected=new Set(['a','c']);before=JSON.stringify(S);SwapAnimation.play=async()=>{throw Error('动画中断')}`);await run('swapSelected()');assert(run('JSON.stringify(S)===before'));assert.equal(run('selected.size'),2);assert.equal(run('undoStack.length'),2);assert(!run('busy'));
+console.log('通过：选中双方直接交换、批量及绑定交换、满组校验、动画完成后原子提交、重复点击拦截、动画失败保留名单、顺序与撤销。');
+})().catch(e=>{console.error(e);process.exitCode=1});

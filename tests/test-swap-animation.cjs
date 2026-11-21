@@ -1,0 +1,5 @@
+const assert=require('node:assert/strict'),{V}=require('../src/core.js'),{SwapAnimation:A}=require('../src/swap-animation.js');
+const before=V.blank();before.overviewEditing=true;before.groups=[{id:'g1',no:'1',name:'甲组',cap:3},{id:'g2',no:'2',name:'乙组',cap:3}];before.people=[V.person({id:'a',group:'g1',pairs:['p']}),V.person({id:'b',group:'g1',pairs:['p']}),V.person({id:'c',group:'g2'}),V.person({id:'fixed',group:'g2'})];
+const after=V.copy(before);V.swap(after,['a','c']);assert.deepEqual(A.plan(before,after).map(t=>[t.person.id,t.from,t.to]),[['a','g1','g2'],['b','g1','g2'],['c','g2','g1']]);assert.deepEqual(A.plan(before,before),[]);
+const reserve=V.copy(before);reserve.people.find(p=>p.id==='c').group=null;reserve.people.find(p=>p.id==='c').reserve=true;const next=V.copy(reserve);V.swap(next,['a','c']);assert.equal(A.plan(reserve,next)[0].to,'reserve');assert.equal(A.plan(reserve,next)[2].from,'reserve');assert.equal(before.people[0].group,'g1');
+console.log('通过：动画路线取自真实交换结果、双向及人数不等、包含未点选的绑定成员、储备位置、名单隔离。');

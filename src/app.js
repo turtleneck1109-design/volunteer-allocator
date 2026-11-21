@@ -86,7 +86,14 @@ function selectedUnitIds(){return new Set(V.units(S).filter(u=>u.some(p=>selecte
 function moveSelected(target,anchor=null,after=false){mutate(()=>{V.move(S,[...selected],target,anchor,after)});selected.clear();render()}
 function toggleLock(){const ids=selectedUnitIds();if(!ids.size)return;const ps=S.people.filter(p=>ids.has(p.id));if(ps.some(leader))return toast('组长位置由任职设置管理');const unlock=ps.every(p=>p.locked);if(unlock&&(S.confirmed.normal||S.confirmed.overview||S.teamDone.length||S.confirmed.internal)){modal('解锁人员',`<p>解锁将使分配阶段需要重新确认，现有位置保留。</p><button class="primary" onclick="unlockSelection()">保存快照并解锁</button>`);return}mutate(()=>ps.forEach(p=>p.locked=!unlock))}
 async function unlockSelection(){if(!await saveSnapshot('解锁前备份'))return;const ids=selectedUnitIds();mutate(()=>{['internal','team','couple','normal','overview'].forEach(k=>delete S.confirmed[k]);S.teamDone=[];S.people.filter(p=>ids.has(p.id)&&!leader(p)).forEach(p=>p.locked=false)});closeModal()}
-function swapSelected(){if(busy)return;try{const next=V.copy(S);V.swap(next,[...selected]);checkpoint();S=next;changed();selected.clear();render();toast('已交换')}catch(e){errorBox(e)}}
+async function swapSelected(){
+ if(busy)return;let problem,committed=false;
+ try{const next=V.copy(S);V.swap(next,[...selected]);busy=true;
+  await SwapAnimation.play(S,next,{label:id=>{const g=groupOf(id);return g?g.no+'组 · '+g.name:id==='reserve'?'储备':'待分配'},chipHtml:personChip});
+  checkpoint();S=next;changed();selected.clear();committed=true;
+ }catch(e){problem=e}finally{busy=false;if(committed)render()}
+ if(problem)errorBox(problem);else if(committed)toast('已交换');
+}
 
 function searchText(value){return String(value??'').normalize('NFKC').trim().toLowerCase()}
 function matches(p){const q=searchText(query);return(!q||searchText(p.name).includes(q)||searchText(p.student).includes(q))&&(!filter||p.cat===filter)}

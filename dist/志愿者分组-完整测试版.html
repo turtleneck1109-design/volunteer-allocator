@@ -214,6 +214,12 @@ dialog{max-height:88vh;padding:22px;width:840px}
 .export-color-legend span{display:inline-flex;align-items:center;gap:6px}
 .export-color-legend i{display:inline-block;width:16px;height:16px;border-radius:4px;border:1px solid #0002}
 .export-full-preview .export-colored-row td{background:var(--export-row-fill);color:#172033}
+
+/* Exchange labels travel in both directions; a compact board covers hidden/cross-page selections. */
+.swap-departing{opacity:.14!important}.swap-receiving{outline:2px solid var(--blue);outline-offset:3px}.swap-flying{display:block!important;text-align:left;z-index:10006!important;max-width:240px;white-space:normal;outline:2px solid var(--blue);box-shadow:0 8px 25px #0004}.swap-route{display:block;font-size:10px;line-height:1.4;margin-top:3px;color:inherit;overflow-wrap:anywhere}
+.swap-controls{position:fixed;z-index:10007;bottom:22px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:20px;background:var(--surface,#fff);color:var(--ink);border:1px solid var(--line);padding:12px 18px;border-radius:14px;box-shadow:0 8px 35px #0003;font-size:13px;white-space:nowrap}.swap-controls button{font-size:12px}
+.swap-stage{position:fixed;z-index:10004;inset:12vh max(16px,calc((100vw - 900px)/2)) 95px;background:var(--surface,#fff);color:var(--ink);border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:0 0 0 100vmax #10182799;overflow:auto}.swap-stage h2{margin:0 0 10px;font-size:18px}.swap-stage p{font-size:12px;color:var(--muted)}.swap-columns{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px}.swap-panel{min-width:0;border:1px solid var(--line);border-radius:12px;padding:16px}.swap-panel h3{font-size:14px;overflow-wrap:anywhere;margin:0 0 18px}.swap-caption{font-size:11px;color:var(--muted);margin:12px 0 6px}.swap-labels{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-height:36px}.swap-labels .person{margin:0;max-width:100%;pointer-events:none;overflow-wrap:anywhere}
+@media(max-width:600px){.swap-stage{inset:12px 8px 90px;padding:14px}.swap-columns{gap:10px}.swap-panel{padding:10px}.swap-panel h3{font-size:12px}.swap-flying{max-width:160px}.swap-controls{bottom:14px;gap:12px}}
 </style></head><body>
 <div class="app"><aside class="sidebar"><div class="brand"><span class="logo">⌘</span>志愿者分组</div><div class="navlabel">工作空间</div><nav class="nav" id="nav"></nav><div class="sidebar-foot"><div class="local-status"><span class="dot"></span>本地离线 · 测试版 2.0</div><div class="sidebar-project-actions"><button id="themeToggle" class="subtle" onclick="toggleTheme()" aria-label="切换为深色模式" aria-pressed="false"><span aria-hidden="true">☾</span>深色模式</button><button id="demoModeButton" class="subtle" onclick="toggleDemo()"><span aria-hidden="true">▷</span>演示模式</button><button class="subtle" onclick="newProject()"><span aria-hidden="true">＋</span>新建活动</button><button class="subtle" onclick="$('restoreFile').click()"><span aria-hidden="true">↥</span>打开项目</button><button class="subtle" onclick="backup()"><span aria-hidden="true">⇩</span>导出项目</button><button class="subtle" onclick="clearProject()"><span aria-hidden="true">↺</span>清空当前活动</button></div></div></aside><main class="main"><header class="topbar"><div class="crumb">我的活动　/　<button class="subtle activity-btn" id="activityName" onclick="editActivity()" title="修改活动名称">新活动 ✎</button></div><div class="top-actions"><button class="mobile-project-menu" onclick="projectMenu()">☰ 项目</button><button class="primary" id="autoRemainingButton" onclick="autoRemaining()">一键完成剩余分配</button><button onclick="showHistory()">◷ 历史</button><button id="saveProjectButton" onclick="saveSnapshot('手动保存').then(ok=>ok&&toast('已保存'))">保存项目</button></div></header><div id="demoBanner" class="demo-banner" hidden></div><div class="workspace"><section class="heading"><div><div class="eyebrow">VOLUNTEER WORKSPACE</div><h1 id="title">导入名单</h1><p id="subtitle"></p></div><section class="stats" id="stats"></section><div class="mode" id="viewSwitch"><button onclick="setView(false)">▦ 卡片</button><button onclick="setView(true)">☷ 列表</button></div></section><div id="mainContent"></div></div><footer class="footer" id="footerActions"><span id="saveState">正在打开本地项目…</span></footer></main></div>
 <input type="file" id="files" hidden multiple accept=".xlsx,.xls,.csv" onchange="handleFiles([...this.files])"><input type="file" id="restoreFile" hidden accept=".json" onchange="restoreProject(this.files[0])"><div class="toast" id="toast" role="status"></div><dialog id="modal"><div class="dialog-head"><h2 id="modalTitle"></h2><button class="subtle icon" aria-label="关闭" onclick="closeModal()">×</button></div><div class="dialog-body" id="modalBody"></div></dialog>
@@ -601,6 +607,60 @@ globalThis.ButtonFeedback=(()=>{
 
 </script>
 <script>
+(function(root){
+'use strict';
+const position=p=>p.group||(p.reserve?'reserve':'pending');
+function plan(before,after){const final=new Map(after.people.map(p=>[p.id,p]));return before.people.filter(p=>final.has(p.id)&&position(p)!==position(final.get(p.id))).map(p=>({person:p,from:position(p),to:position(final.get(p.id))}));}
+function visible(el){if(!el)return false;const r=el.getBoundingClientRect();if(r.width<=0||r.height<=0||r.top<8||r.left<8||r.bottom>innerHeight-8||r.right>innerWidth-8)return false;for(let a=el.parentElement;a&&a!==document.body;a=a.parentElement){const css=getComputedStyle(a);if(/auto|scroll|hidden|clip/.test(css.overflow+css.overflowX+css.overflowY)){const b=a.getBoundingClientRect();if(r.top<b.top||r.bottom>b.bottom||r.left<b.left||r.right>b.right)return false;}}return true;}
+async function play(before,after,{label,chipHtml}){
+ const transfers=plan(before,after);if(!transfers.length)return;
+ const reduced=typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+ const app=document.querySelector('.app'),wasInert=app?.inert,focused=document.activeElement,clones=[],animations=new Set(),dimmed=new Set(),highlighted=new Set();let overlay,controls,skip=false;
+ const sourceFor=id=>[...document.querySelectorAll('[data-person]')].find(el=>el.dataset.person===id);
+ const sources=new Map(transfers.map(t=>[t.person.id,sourceFor(t.person.id)]));
+ const locations=[...new Set(transfers.map(t=>t.from))];
+ const sides=locations.map(loc=>transfers.filter(t=>t.from===loc));
+ const inPlace=transfers.length<=6&&sides[0].length===sides[1].length&&transfers.every(t=>visible(sources.get(t.person.id)));
+ const makeChip=p=>{const box=document.createElement('div');box.innerHTML=chipHtml(p);const chip=box.firstElementChild;chip.removeAttribute('onclick');chip.removeAttribute('onkeydown');chip.removeAttribute('data-person');chip.removeAttribute('draggable');chip.removeAttribute('role');chip.removeAttribute('aria-checked');chip.setAttribute('tabindex','-1');chip.removeAttribute('aria-pressed');chip.classList.remove('chosen');chip.querySelector('.selected-check')?.remove();chip.setAttribute('aria-hidden','true');return chip;};
+ const finish=()=>{skip=true;animations.forEach(a=>{try{a.finish()}catch{a.cancel()}})};
+ try{
+  if(app)app.inert=true;
+  controls=document.createElement('div');controls.className='swap-controls';const status=document.createElement('span');status.setAttribute('role','status');status.setAttribute('aria-live','polite');status.textContent='正在交换 '+transfers.length+' 人';controls.append(status);
+  const button=document.createElement('button');button.type='button';button.textContent='立即完成';button.addEventListener('click',finish);controls.append(button);document.body.append(controls);button.focus({preventScroll:true});
+  if(!inPlace){overlay=document.createElement('section');overlay.className='swap-stage';overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-label','人员交换动画');overlay.innerHTML='<h2>人员交换</h2><p>双方标签移入对方小组，绑定成员一起交换。</p><div class="swap-columns"></div>';document.body.append(overlay);}
+  // Show small batches in the fallback board so clipped and cross-page selections stay readable.
+  const batches=inPlace?[transfers]:Array.from({length:Math.ceil(Math.max(...sides.map(s=>s.length))/3)},(_,i)=>sides.flatMap(s=>s.slice(i*3,i*3+3)));
+  let done=0;
+  for(const batch of batches){
+   if(skip)break;const entries=[];
+   if(inPlace){
+    batch.forEach(t=>{const source=sources.get(t.person.id),opposite=transfers.filter(q=>q.from===t.to),index=transfers.filter(q=>q.from===t.from).indexOf(t),target=sources.get(opposite[index%opposite.length].person.id);entries.push({t,source,target});const group=source.closest('[data-drop]');if(group){group.classList.add('swap-receiving');highlighted.add(group)}});
+   }else{
+    const columns=overlay.querySelector('.swap-columns');columns.replaceChildren();const origin=new Map(),destination=new Map();
+    locations.forEach(loc=>{const panel=document.createElement('section');panel.className='swap-panel';const heading=document.createElement('h3');heading.textContent=label(loc);panel.append(heading);for(const [caption,items,isArrival] of [['换出',batch.filter(t=>t.from===loc),false],['换入',batch.filter(t=>t.to===loc),true]]){const title=document.createElement('div');title.className='swap-caption';title.textContent=caption;panel.append(title);const list=document.createElement('div');list.className='swap-labels';items.forEach(t=>{const chip=makeChip(t.person);list.append(chip);if(isArrival){chip.style.opacity='0';destination.set(t.person.id,chip)}else origin.set(t.person.id,chip)});panel.append(list)}columns.append(panel)});
+    batch.forEach(t=>entries.push({t,source:origin.get(t.person.id),target:destination.get(t.person.id)}));
+   }
+   const jobs=entries.map(({t,source,target})=>{
+    const start=source.getBoundingClientRect(),end=target.getBoundingClientRect(),clone=makeChip(t.person);clone.classList.add('flying-person','swap-flying');
+    const route=document.createElement('small');route.className='swap-route';route.textContent='→ '+label(t.to);clone.append(route);Object.assign(clone.style,{left:start.left+'px',top:start.top+'px',width:Math.max(start.width,170)+'px',margin:'0'});document.body.append(clone);clones.push(clone);source.classList.add('swap-departing');dimmed.add(source);
+    const dx=end.left-start.left,dy=end.top-start.top,bend=t.from===locations[0]?-48:48;
+    if(reduced||typeof clone.animate!=='function')return Promise.resolve();
+    const animation=clone.animate([{transform:'translate(0,0)',opacity:1},{transform:`translate(${dx*.5}px,${dy*.5+bend}px)`,opacity:1,offset:.5},{transform:`translate(${dx}px,${dy}px)`,opacity:1}],{duration:1800,easing:'ease-in-out',fill:'forwards'});animations.add(animation);
+    return animation.finished.catch(e=>{if(!skip)throw e}).finally(()=>animations.delete(animation));
+   });
+   await Promise.all(jobs);done+=batch.length;status.textContent='已交换 '+done+' / '+transfers.length+' 人';
+   if(!inPlace){entries.forEach(({target})=>target.style.opacity='1');clones.splice(0).forEach(el=>el.remove());}
+   if(!skip&&!reduced)await new Promise(resolve=>setTimeout(resolve,350));
+  }
+ }finally{
+  animations.forEach(a=>a.cancel());clones.forEach(el=>el.remove());dimmed.forEach(el=>el.classList.remove('swap-departing'));highlighted.forEach(el=>el.classList.remove('swap-receiving'));overlay?.remove();controls?.remove();if(app)app.inert=wasInert;if(focused?.isConnected)focused.focus({preventScroll:true});
+ }
+}
+root.SwapAnimation={plan,play};
+})(typeof module!=='undefined'?module.exports:window);
+
+</script>
+<script>
 'use strict';
 const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const stageNames={import:'导入',dedup:'查重',roles:'任职',internal:'内部',team:'团体',couple:'情侣',normal:'普通',overview:'总览',export:'导出',verification:'验证'};
@@ -689,7 +749,14 @@ function selectedUnitIds(){return new Set(V.units(S).filter(u=>u.some(p=>selecte
 function moveSelected(target,anchor=null,after=false){mutate(()=>{V.move(S,[...selected],target,anchor,after)});selected.clear();render()}
 function toggleLock(){const ids=selectedUnitIds();if(!ids.size)return;const ps=S.people.filter(p=>ids.has(p.id));if(ps.some(leader))return toast('组长位置由任职设置管理');const unlock=ps.every(p=>p.locked);if(unlock&&(S.confirmed.normal||S.confirmed.overview||S.teamDone.length||S.confirmed.internal)){modal('解锁人员',`<p>解锁将使分配阶段需要重新确认，现有位置保留。</p><button class="primary" onclick="unlockSelection()">保存快照并解锁</button>`);return}mutate(()=>ps.forEach(p=>p.locked=!unlock))}
 async function unlockSelection(){if(!await saveSnapshot('解锁前备份'))return;const ids=selectedUnitIds();mutate(()=>{['internal','team','couple','normal','overview'].forEach(k=>delete S.confirmed[k]);S.teamDone=[];S.people.filter(p=>ids.has(p.id)&&!leader(p)).forEach(p=>p.locked=false)});closeModal()}
-function swapSelected(){if(busy)return;try{const next=V.copy(S);V.swap(next,[...selected]);checkpoint();S=next;changed();selected.clear();render();toast('已交换')}catch(e){errorBox(e)}}
+async function swapSelected(){
+ if(busy)return;let problem,committed=false;
+ try{const next=V.copy(S);V.swap(next,[...selected]);busy=true;
+  await SwapAnimation.play(S,next,{label:id=>{const g=groupOf(id);return g?g.no+'组 · '+g.name:id==='reserve'?'储备':'待分配'},chipHtml:personChip});
+  checkpoint();S=next;changed();selected.clear();committed=true;
+ }catch(e){problem=e}finally{busy=false;if(committed)render()}
+ if(problem)errorBox(problem);else if(committed)toast('已交换');
+}
 
 function searchText(value){return String(value??'').normalize('NFKC').trim().toLowerCase()}
 function matches(p){const q=searchText(query);return(!q||searchText(p.name).includes(q)||searchText(p.student).includes(q))&&(!filter||p.cat===filter)}
