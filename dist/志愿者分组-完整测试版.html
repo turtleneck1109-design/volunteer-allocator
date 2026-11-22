@@ -1141,12 +1141,23 @@ function appendExportColorLegend(rows,colors,width){
  exportColorRules.forEach(([key,label,color])=>{const row=Array(Math.max(1,width)).fill('');row[0]=names[key]+'：'+label;rows.push(row);colors[rows.length]=color});
  rows.push(['无填色：普通志愿者（无特殊身份）'],[],['多种身份按以下顺序优先着色：'],['区长 ＞ 小组长 ＞ 摄影＋小闪电'],['＞ 摄影 ＞ 小闪电 ＞ 来源类别']);
 }
+// Approximate Excel character units: CJK/full-width glyphs take two; combining marks take no space.
+function exportTextWidth(value){
+ let widest=0;
+ for(const line of String(value??'').split(/\r\n|[\r\n]/)){let width=0;for(const ch of line){const n=ch.codePointAt(0);if(/\p{Mark}/u.test(ch)||n===0x200d||n===0xfe0f)continue;width+=ch==='\t'?4:(n>=0x1100&&(n<=0x115f||n===0x2329||n===0x232a||n>=0x2e80&&n<=0xa4cf||n>=0xac00&&n<=0xd7a3||n>=0xf900&&n<=0xfaff||n>=0xfe10&&n<=0xfe6f||n>=0xff00&&n<=0xff60||n>=0xffe0&&n<=0xffe6||n>=0x1f000)?2:1);if(width>=69)break}widest=Math.max(widest,width)}
+ return widest;
+}
+function autoExportWidths(rows,start=0,end=rows.length-1){
+ const count=rows.slice(start,end+1).reduce((n,row)=>Math.max(n,row.length),0),widths=Array(count).fill(8);
+ for(let r=start;r<=end;r++)for(let c=0;c<(rows[r]?.length||0);c++)if(widths[c]<72)widths[c]=Math.min(72,Math.max(widths[c],exportTextWidth(rows[r][c])+3));
+ return widths.map(wch=>({wch}));
+}
 function outputSheetWithData(g,reserve=false,withdrawn=false){
  const ps=withdrawn?(S.withdrawn||[]):S.people.filter(p=>reserve?p.reserve:p.group===g.id);
  const header=exportCols.map(k=>exportColumnLabel(k)),rows=[[S.name],[withdrawn?'放弃参加名单':reserve?'储备名单':g.no+'组 · '+g.name],['导出时间：'+now()],...((reserve||withdrawn)?[]:[['小组长：'+(personOf(g.leader)?.name||'未设置')+'　区长：'+(personOf(g.area)?.name||'未设置')]]),[],header,...ps.map(p=>exportCols.map(k=>String(columnValue(p,k))))];
  const start=(reserve||withdrawn)?4:5,lastPersonRow=rows.length-1,colors={};
  if(S.exportRowColors){ps.forEach((p,i)=>colors[start+i+2]=exportRowRule(p)?.[2]||'');appendExportColorLegend(rows,colors,header.length)}
- const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=header.map(()=>({wch:20}));
+ const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=autoExportWidths(rows,start,lastPersonRow);
  if(S.exportRowColors){ws['!exportRowColors']=colors;if(header.length>1)ws['!merges']=rows.flatMap((row,r)=>r>lastPersonRow&&row.length?[{s:{r,c:0},e:{r,c:header.length-1}}]:[])}
  // Footer notes must never enter the roster filter/sort range.
  if(ps.length)ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:start,c:0},e:{r:lastPersonRow,c:Math.max(0,header.length-1)}})};return ws;
