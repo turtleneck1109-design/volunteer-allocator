@@ -644,7 +644,7 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
 /* Printable, offline roll-call rosters. The caller supplies a snapshot, never live state. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.RollCallPdf=api})(globalThis,()=>{
  'use strict';
- const defaults=[['name','姓名'],['student','学号'],['unified:学院/单位','学院'],['unified:手机号','电话号码'],['unified:衣服尺码','服装尺寸']];
+ const defaults=[['name','姓名'],['student','学号'],['unified:手机号','电话号码'],['unified:衣服尺码','服装尺寸']];
  let cachedBytes,cachedFont;
  function bands(columns){
   if(columns.length<=6)return [columns];
@@ -665,37 +665,47 @@ t.sheetStubs=true}if(t.type=="array"){t.type="binary";var a=xk(e,t);t.type="arra
   const missing=[...new Set(Array.from([data.activity,data.group,data.leader,data.time,...data.columns.map(c=>c.label),...data.rows.flat()].map(clean).join('')).filter(c=>c!=='\n'&&!supported.has(c.codePointAt(0))))];
   if(missing.length)throw Error('点名 PDF 字体不支持这些字符：'+missing.slice(0,12).join(' ')+'；请检查所选字段内容');
   doc.setTitle(clean(data.group)+' · 点名名单');doc.setCreator('志愿者分组');doc.setSubject('本组志愿者点名名单');
-  const ink=lib.rgb(.12,.16,.2),muted=lib.rgb(.4,.44,.48),line=lib.rgb(.72,.76,.79),fill=lib.rgb(.94,.96,.97),margin=30,size=9,lineHeight=13;
+  const ink=lib.rgb(.12,.16,.2),muted=lib.rgb(.4,.44,.48),line=lib.rgb(.72,.76,.79),fill=lib.rgb(.94,.96,.97),margin=26,bottom=36;
+  let size=9,lineHeight=10.5,padding=1.5;
   function wrap(value,width,fs=size){const result=[];for(const paragraph of clean(value).split('\n')){let current='';for(const char of paragraph){if(current&&font.widthOfTextAtSize(current+char,fs)>width){result.push(current);current=''}current+=char}result.push(current)}return result}
   const short=(value,width,fs,max)=>{const lines=wrap(value,width,fs);if(lines.length>max){lines.length=max;while(font.widthOfTextAtSize(lines[max-1]+'…',fs)>width)lines[max-1]=Array.from(lines[max-1]).slice(0,-1).join('');lines[max-1]+='…'}return lines};
   const allBands=bands(data.columns),pages=[];
   for(let bandIndex=0;bandIndex<allBands.length;bandIndex++){
    const columns=allBands[bandIndex],landscape=data.columns.length>5,[width,height]=landscape?[841.89,595.28]:[595.28,841.89],tableWidth=width-margin*2;
    const weight=key=>key==='name'?.85:key==='student'?1.25:key==='unified:手机号'?1.25:key==='unified:学院/单位'?1.65:key==='unified:衣服尺码'?.75:1.35;
-   const total=columns.reduce((n,c)=>n+weight(c.key),0),widths=[28,30,...columns.map(c=>(tableWidth-58)*weight(c.key)/total)],headers=['序号','点名',...columns.map(c=>c.label)],headerLines=headers.map((h,i)=>short(h,widths[i]-10,size,4)),headerHeight=Math.max(28,Math.max(...headerLines.map(a=>a.length))*lineHeight+12);
-   let page,y,bodyTop;
-   function text(lines,x,top,fs=size,color=ink){lines.forEach((t,i)=>page.drawText(t,{x,y:top-fs-i*(fs+4),size:fs,font,color}))}
-   function cells(lines,rowHeight,header=false){let x=margin;for(let c=0;c<widths.length;c++){page.drawRectangle({x,y:y-rowHeight,width:widths[c],height:rowHeight,borderWidth:.4,borderColor:line,...(header?{color:fill}:{})});text(lines[c]||[],x+5,y-5);x+=widths[c]}}
-   function start(){page=doc.addPage([width,height]);pages.push(page);let top=height-margin;text(['点名名单'],margin,top,19);top-=31;
-    const title=short(data.activity,tableWidth,11,2);text(title,margin,top,11);top-=title.length*15+3;
-    const group=short(data.group+'　｜　组长：'+(data.leader||'未设置'),tableWidth,10,2);text(group,margin,top,10);top-=group.length*14+6;
-    text([`本组 ${data.rows.length} 人　｜　导出时间：${data.time}`],margin,top,8,muted);top-=23;
-    if(allBands.length>1){text([`字段分栏 ${bandIndex+1}/${allBands.length} · 按序号对应同一人`],margin,top,9,muted);top-=20}
-    y=top;cells(headerLines,headerHeight,true);y-=headerHeight;bodyTop=y;
+   const total=columns.reduce((n,c)=>n+weight(c.key),0),widths=[28,30,...columns.map(c=>(tableWidth-58)*weight(c.key)/total)],headers=['序号','点名',...columns.map(c=>c.label)];
+   const activity=short(data.activity,tableWidth-86,9.5,2),group=short(data.group+'　｜　组长：'+(data.leader||'未设置'),tableWidth,10,2);
+   const tableTop=height-margin-Math.max(22,activity.length*12+4)-group.length*13-4-17-(allBands.length>1?16:0);
+   const linesFor=(row,fs)=>columns.map((c,i)=>wrap(row[data.columns.indexOf(c)],widths[i+2]-10,fs));
+   // Keep the largest readable type that fits this entire roster on one A4 page.
+   // If even 8 pt cannot fit, use the regular compact layout and paginate without truncation.
+   const layouts=[{size:9,lineHeight:10.5,padding:1.5},{size:8.5,lineHeight:10,padding:1.25},{size:8,lineHeight:9.5,padding:1}];
+   const headerFor=layout=>headers.map((h,i)=>short(h,widths[i]-10,layout.size,4));
+   const headerHeightFor=layout=>Math.max(20,Math.max(...headerFor(layout).map(a=>a.length))*layout.lineHeight+6);
+   const chosen=layouts.find(layout=>data.rows.reduce((n,row)=>n+Math.max(1,...linesFor(row,layout.size).map(a=>a.length))*layout.lineHeight+layout.padding*2,0)<=tableTop-headerHeightFor(layout)-bottom)||layouts[0];
+   ({size,lineHeight,padding}=chosen);
+   const headerLines=headerFor(chosen),headerHeight=headerHeightFor(chosen),rowLines=data.rows.map(row=>linesFor(row,size));
+   let page,y;
+   function text(lines,x,top,fs=size,color=ink,leading=fs+3){lines.forEach((t,i)=>page.drawText(t,{x,y:top-fs-i*leading,size:fs,font,color}))}
+   function cells(lines,rowHeight,header=false){let x=margin;for(let c=0;c<widths.length;c++){page.drawRectangle({x,y:y-rowHeight,width:widths[c],height:rowHeight,borderWidth:.4,borderColor:line,...(header?{color:fill}:{})});text(lines[c]||[],x+5,y-(header?3:padding),size,ink,lineHeight);x+=widths[c]}}
+   function start(){page=doc.addPage([width,height]);pages.push(page);let top=height-margin;text(['点名名单'],margin,top,16);text(activity,margin+86,top-3,9.5,muted,12);top-=Math.max(22,activity.length*12+4);
+    text(group,margin,top,10,ink,13);top-=group.length*13+4;
+    text([`本组 ${data.rows.length} 人　｜　导出时间：${data.time}`],margin,top,8,muted);top-=17;
+    if(allBands.length>1){text([`字段分栏 ${bandIndex+1}/${allBands.length} · 按序号对应同一人`],margin,top,8,muted);top-=16}
+    y=top;cells(headerLines,headerHeight,true);y-=headerHeight;
    }
    start();
    for(let r=0;r<data.rows.length;r++){
-    const row=data.rows[r],lines=columns.map((c,i)=>wrap(row[data.columns.indexOf(c)],widths[i+2]-10)),maxLines=Math.max(1,...lines.map(a=>a.length));let offset=0;
-    while(offset<maxLines){if(y-55<lineHeight+12)start();const count=Math.min(maxLines-offset,Math.max(1,Math.floor((y-55-12)/lineHeight))),h=Math.max(29,count*lineHeight+12);
-     if(y-h<55&&y<bodyTop){start();continue}
-     cells([[String(r+1),...(offset?['续']:[])],[],...lines.map(a=>a.slice(offset,offset+count))],h);
-     if(!offset)page.drawRectangle({x:margin+28+10,y:y-19,width:10,height:10,borderWidth:.7,borderColor:muted});
+    const lines=rowLines[r],maxLines=Math.max(1,...lines.map(a=>a.length));let offset=0;
+    while(offset<maxLines){if(y-bottom<lineHeight+padding*2)start();const count=Math.min(maxLines-offset,Math.max(1,Math.floor((y-bottom-padding*2)/lineHeight))),h=count*lineHeight+padding*2;
+     cells([[String(r+1)],[],...lines.map(a=>a.slice(offset,offset+count))],h);
+     if(!offset){const box=Math.min(9,h-2);page.drawRectangle({x:margin+28+(30-box)/2,y:y-(h+box)/2,width:box,height:box,borderWidth:.7,borderColor:muted})}
      y-=h;offset+=count;
     }
    }
    if(!data.rows.length){cells([[],[],['暂无人员'],...columns.slice(1).map(()=>[])],32);y-=32}
   }
-  pages.forEach((p,i)=>{const footer=`第 ${i+1} / ${pages.length} 页`;p.drawText(footer,{x:p.getWidth()-margin-font.widthOfTextAtSize(footer,8),y:25,size:8,font,color:muted});p.drawText('点名：到场后在方框内勾选', {x:margin,y:25,size:8,font,color:muted})});
+  pages.forEach((p,i)=>{const footer=`第 ${i+1} / ${pages.length} 页`;p.drawText(footer,{x:p.getWidth()-margin-font.widthOfTextAtSize(footer,8),y:18,size:8,font,color:muted});p.drawText('点名：到场后在方框内勾选', {x:margin,y:18,size:8,font,color:muted})});
   return doc.save();
  }
  return {defaults,bands,create};
@@ -1617,20 +1627,20 @@ function workbookFor(gs,withReserve=false,withWithdrawn=false){return withExport
 function workbookForWithData(gs,withReserve=false,withWithdrawn=false){if(exportCols.length>16384)throw Error('Excel 每张表最多 16,384 列，请减少所选字段');if(!exportCols.length)throw Error('至少选择一列');const wb=XLSX.utils.book_new();gs.forEach((g,i)=>{let name=(g.no+'组-'+g.name).replace(/[\\/?*\[\]:]/g,'_').slice(0,24)+'-'+(i+1);XLSX.utils.book_append_sheet(wb,outputSheet(g),name)});if(withReserve)XLSX.utils.book_append_sheet(wb,outputSheet(null,true),'储备名单');if(withWithdrawn)XLSX.utils.book_append_sheet(wb,outputSheet(null,false,true),'放弃参加名单');if(!wb.SheetNames.length)throw Error('请选择小组、储备或放弃参加名单');return writeExportWorkbook(wb)}
 function exportExcel(){return withExportData(()=>exportExcelWithData())}
 function exportExcelWithData(){try{const gs=S.groups.filter(g=>exportSelection.includes(g.id));if(exportMode==='book')download(safeName(S.name)+'-分组名单.xlsx',workbookFor(gs,!!exportSpecial,!!S.exportWithdrawn));else{const files=gs.map((g,i)=>({name:safeName(g.no+'组-'+g.name)+'-'+(i+1)+'.xlsx',data:workbookFor([g])}));if(exportSpecial)files.push({name:'储备名单.xlsx',data:workbookFor([],true)});if(S.exportWithdrawn)files.push({name:'放弃参加名单.xlsx',data:workbookFor([],false,true)});if(!files.length)throw Error('请选择要导出的名单');download(safeName(S.name)+'-分组名单.zip',zipFiles(files))}toast('Excel 已生成')}catch(e){errorBox(e)}}
-const mailPdfDefaults=[['name','姓名'],['student','学号'],['unified:学院/单位','学院'],['unified:手机号','电话号码'],['unified:衣服尺码','服装尺寸']];
+const mailPdfDefaults=[['name','姓名'],['student','学号'],['unified:手机号','电话号码'],['unified:衣服尺码','服装尺寸']];
 function mailPdfChoices(){return withExportData(()=>{const choices=new Map(mailPdfDefaults);for(const [key,label] of availableColumns())if(!choices.has(key))choices.set(key,label);return [...choices]})}
-function mailPdfColumns(){const choices=new Map(mailPdfChoices()),keys=Array.isArray(S.mailPdfCols)?S.mailPdfCols:mailPdfDefaults.map(([k])=>k);return [...new Set(keys)].filter(k=>choices.has(k))}
+function mailPdfColumns(){const choices=new Map(mailPdfChoices()),keys=Array.isArray(S.mailPdfCols)?S.mailPdfCols:mailPdfDefaults.map(([k])=>k);const legacyDefaults=[...mailPdfDefaults.map(([k])=>k),'unified:学院/单位'],legacy=!S.mailPdfLayoutVersion&&keys.length===legacyDefaults.length&&legacyDefaults.every(k=>keys.includes(k));return [...new Set(keys)].filter(k=>choices.has(k)&&(!legacy||k!=='unified:学院/单位'))}
 function mailPdfLabel(key){return mailPdfDefaults.find(([k])=>k===key)?.[1]||exportColumnLabel(key)}
-function mailPdfControls(){const keys=mailPdfColumns();return `<div class="mail-pdf-settings"><div class="section-top"><h3>点名名单 PDF</h3><button type="button" onclick="configureMailPdf()">选择 PDF 字段</button><button type="button" onclick="downloadMailPdfs()">下载点名 PDF</button></div><p id="mailPdfSummary">${keys.map(k=>esc(mailPdfLabel(k))).join(' · ')||'尚未选择字段'}</p><p class="subtext">另含序号和点名方框 · A4 自动分页 · 学院、电话、服装尺寸自动合并各表对应列，缺失值留空。</p></div>`}
+function mailPdfControls(){const keys=mailPdfColumns();return `<div class="mail-pdf-settings"><div class="section-top"><h3>点名名单 PDF</h3><button type="button" onclick="configureMailPdf()">选择 PDF 字段</button><button type="button" onclick="downloadMailPdfs()">下载点名 PDF</button></div><p id="mailPdfSummary">${keys.map(k=>esc(mailPdfLabel(k))).join(' · ')||'尚未选择字段'}</p><p class="subtext">另含序号和点名方框 · A4 紧凑排版，优先一页放全；人数或字段较多时自动分页。电话、服装尺寸自动匹配，缺失值留空。</p></div>`}
 function mailPdfData(group){return withExportData(()=>{const keys=mailPdfColumns();if(!keys.length)throw Error('请至少选择一个点名 PDF 字段');return {activity:S.name,group:group.no+'组 · '+group.name,leader:personOf(group.leader)?.name||'',time:now(),columns:keys.map(key=>({key,label:mailPdfLabel(key)})),rows:S.people.filter(p=>p.group===group.id).map(p=>keys.map(k=>String(columnValue(p,k))))}})}
 let mailPdfEditor=null;
-function configureMailPdf(){mailPdfEditor={choices:mailPdfChoices(),selected:mailPdfColumns(),pages:{}};modal('点名 PDF 字段',`<p class="subtext">仅修改点名 PDF，Excel 列保持不变。字段较多时自动横向打印、分栏分页；序号和点名框始终保留。</p><div id="mailPdfFieldSections">${[['common','常用字段'],['unified','统一字段'],['custom','自定义标签'],['raw','原始字段']].map(([key,label])=>`<details class="export-fields-section" data-pdf-section="${key}" ontoggle="renderMailPdfFields('${key}')" ${key==='raw'?'':'open'}><summary>${label}</summary><div data-pdf-content></div></details>`).join('')}</div><p id="mailPdfFieldCount" role="status"></p><div class="form-actions"><button onclick="resetMailPdfFields()">恢复默认五列</button><button onclick="closeModal()">取消</button><button class="primary" onclick="saveMailPdfFields()">保存 PDF 字段</button></div>`);['common','unified','custom'].forEach(renderMailPdfFields);updateMailPdfFieldCount()}
+function configureMailPdf(){mailPdfEditor={choices:mailPdfChoices(),selected:mailPdfColumns(),pages:{}};modal('点名 PDF 字段',`<p class="subtext">仅修改点名 PDF，Excel 列保持不变。字段较多时自动横向打印、分栏分页；序号和点名框始终保留。</p><div id="mailPdfFieldSections">${[['common','常用字段'],['unified','统一字段'],['custom','自定义标签'],['raw','原始字段']].map(([key,label])=>`<details class="export-fields-section" data-pdf-section="${key}" ontoggle="renderMailPdfFields('${key}')" ${key==='raw'?'':'open'}><summary>${label}</summary><div data-pdf-content></div></details>`).join('')}</div><p id="mailPdfFieldCount" role="status"></p><div class="form-actions"><button onclick="resetMailPdfFields()">恢复默认四列</button><button onclick="closeModal()">取消</button><button class="primary" onclick="saveMailPdfFields()">保存 PDF 字段</button></div>`);['common','unified','custom'].forEach(renderMailPdfFields);updateMailPdfFieldCount()}
 function renderMailPdfFields(key){const section=document.querySelector('[data-pdf-section="'+key+'"]');if(!section?.open||!mailPdfEditor)return;const fields=exportSectionFields(mailPdfEditor.choices,key),pages=Math.max(1,Math.ceil(fields.length/100)),page=Math.min(mailPdfEditor.pages[key]||0,pages-1);mailPdfEditor.pages[key]=page;section.querySelector('[data-pdf-content]').innerHTML=`${pages>1?`<div class="pagination"><button ${page?'':'disabled'} onclick="pageMailPdfFields('${key}',-1)">上一页</button><span>${page+1} / ${pages}</span><button ${page+1<pages?'':'disabled'} onclick="pageMailPdfFields('${key}',1)">下一页</button></div>`:''}<div class="checklist">${fields.slice(page*100,(page+1)*100).map(([k,label])=>`<label><input type="checkbox" data-pdf-col="${esc(k)}" ${mailPdfEditor.selected.includes(k)?'checked':''} onchange="toggleMailPdfField(this.dataset.pdfCol,this.checked)">${esc(label)}</label>`).join('')||'<p class="subtext">暂无字段</p>'}</div>`}
 function pageMailPdfFields(key,delta){mailPdfEditor.pages[key]=Math.max(0,(mailPdfEditor.pages[key]||0)+delta);renderMailPdfFields(key)}
 function toggleMailPdfField(key,on){mailPdfEditor.selected=mailPdfEditor.selected.filter(k=>k!==key);if(on)mailPdfEditor.selected.push(key);updateMailPdfFieldCount()}
 function updateMailPdfFieldCount(){$('mailPdfFieldCount').textContent='已选 '+mailPdfEditor.selected.length+' 列＋序号／点名'}
 function resetMailPdfFields(){mailPdfEditor.selected=mailPdfDefaults.map(([k])=>k);['common','unified','custom','raw'].forEach(renderMailPdfFields);updateMailPdfFieldCount()}
-function saveMailPdfFields(){if(!mailPdfEditor.selected.length)return toast('请至少选择一个点名 PDF 字段');S.mailPdfCols=[...mailPdfEditor.selected];changed();closeModal();renderExport();toast('已保存')}
+function saveMailPdfFields(){if(!mailPdfEditor.selected.length)return toast('请至少选择一个点名 PDF 字段');S.mailPdfCols=[...mailPdfEditor.selected];S.mailPdfLayoutVersion=2;changed();closeModal();renderExport();toast('已保存')}
 function mailData(){const gs=S.groups.filter(g=>exportSelection.includes(g.id));if(!gs.length)throw Error('请选择至少一个小组');if(!exportCols.length)throw Error('请选择导出列');const subject=$('mailSubject').value.replace(/[\r\n]/g,' '),body=$('mailBody').value;return gs.map(g=>{const p=personOf(g.leader);if(!p)throw Error(g.name+' 尚未设置组长');const email=document.querySelector('[data-mail-group="'+g.id+'"]').value.trim();if(!/^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(email))throw Error(g.name+'：请填写有效的组长邮箱');const replace=s=>s.replaceAll('{小组}',g.no+'组 · '+g.name).replaceAll('{组长}',p.name);return {g,p,email,subject:replace(subject),body:replace(body)}})}
 function previewMail(){try{const mails=mailData();modal('邮件预览',mails.map(m=>`<div class="section-card"><b>${esc(m.g.no+'组 · '+m.g.name)}</b><p>收件人：${esc(m.email)}</p><p>主题：${esc(m.subject)}</p><pre>${esc(m.body)}</pre><span class="badge">附件：本组名单.xlsx · ${exportCols.length} 列</span> <span class="badge">点名名单.pdf · ${mailPdfColumns().length} 列＋序号／点名</span></div>`).join(''))}catch(e){errorBox(e)}}
 const utf8=s=>new TextEncoder().encode(s);
