@@ -32,10 +32,10 @@
   for(let bandIndex=0;bandIndex<allBands.length;bandIndex++){
    const columns=allBands[bandIndex],landscape=data.columns.length>5,[width,height]=landscape?[841.89,595.28]:[595.28,841.89],tableWidth=width-margin*2;
    const weight=key=>key==='name'?.85:key==='student'?1.25:key==='unified:手机号'?1.25:key==='unified:学院/单位'?1.65:key==='unified:衣服尺码'?.75:1.35;
-   const total=columns.reduce((n,c)=>n+weight(c.key),0),widths=[28,30,...columns.map(c=>(tableWidth-58)*weight(c.key)/total)],headers=['序号','点名',...columns.map(c=>c.label)];
+   const total=columns.reduce((n,c)=>n+weight(c.key),0),widths=[28,34,34,34,...columns.map(c=>(tableWidth-130)*weight(c.key)/total)],headers=['序号','点名1','点名2','点名3',...columns.map(c=>c.label)];
    const activity=short(data.activity,tableWidth-86,9.5,2),group=short(data.group+'　｜　组长：'+(data.leader||'未设置'),tableWidth,10,2);
    const tableTop=height-margin-Math.max(22,activity.length*12+4)-group.length*13-4-17-(allBands.length>1?16:0);
-   const linesFor=(row,fs)=>columns.map((c,i)=>wrap(row[data.columns.indexOf(c)],widths[i+2]-10,fs));
+   const linesFor=(row,fs)=>columns.map((c,i)=>wrap(row[data.columns.indexOf(c)],widths[i+4]-10,fs));
    // Keep the largest readable type that fits this entire roster on one A4 page.
    // If even 8 pt cannot fit, use the regular compact layout and paginate without truncation.
    const layouts=[{size:9,lineHeight:10.5,padding:1.5},{size:8.5,lineHeight:10,padding:1.25},{size:8,lineHeight:9,padding:1}];
@@ -57,19 +57,19 @@
    for(let r=0;r<data.rows.length;r++){
     const lines=rowLines[r],maxLines=Math.max(1,...lines.map(a=>a.length));let offset=0;
     while(offset<maxLines){if(y-bottom<lineHeight+padding*2)start();const count=Math.min(maxLines-offset,Math.max(1,Math.floor((y-bottom-padding*2)/lineHeight))),h=count*lineHeight+padding*2;
-     cells([[String(r+1)],[],...lines.map(a=>a.slice(offset,offset+count))],h,false,data.rowColors?.[r]);
-     if(!offset){const box=Math.min(9,h-2);page.drawRectangle({x:margin+28+(30-box)/2,y:y-(h+box)/2,width:box,height:box,borderWidth:.7,borderColor:muted})}
+     cells([[String(r+1)],[],[],[],...lines.map(a=>a.slice(offset,offset+count))],h,false,data.rowColors?.[r]);
+     if(!offset){const box=Math.min(9,h-2);for(let check=0;check<3;check++)page.drawRectangle({x:margin+28+check*34+(34-box)/2,y:y-(h+box)/2,width:box,height:box,borderWidth:.7,borderColor:muted})}
      y-=h;offset+=count;
     }
    }
-   if(!data.rows.length){cells([[],[],['暂无人员'],...columns.slice(1).map(()=>[])],32);y-=32}
+   if(!data.rows.length){cells([[],[],[],[],['暂无人员'],...columns.slice(1).map(()=>[])],32);y-=32}
   }
   pages.forEach((p,i)=>{
    if(legend.length){p.drawText('颜色说明',{x:margin,y:54,size:7,font,color:muted});const startX=margin+48,itemWidth=(p.getWidth()-margin-startX)/5;
     legend.forEach((item,index)=>{const x=startX+(index%5)*itemWidth,y=54-Math.floor(index/5)*12,color=rgbHex(item.color);p.drawRectangle({x,y,width:8,height:7,borderWidth:.35,borderColor:line,...(color?{color}:{})});p.drawText(clean(item.label),{x:x+11,y,size:7,font,color:ink})});
     p.drawText('兼任优先级：区长 > 小组长 > 摄影＋小闪电 > 摄影 > 小闪电 > 来源类别',{x:margin,y:30,size:6.8,font,color:muted});
    }
-   const footer=`第 ${i+1} / ${pages.length} 页`;p.drawText(footer,{x:p.getWidth()-margin-font.widthOfTextAtSize(footer,8),y:18,size:8,font,color:muted});p.drawText('点名：到场后在方框内勾选', {x:margin,y:18,size:8,font,color:muted})});
+   const footer=`第 ${i+1} / ${pages.length} 页`;p.drawText(footer,{x:p.getWidth()-margin-font.widthOfTextAtSize(footer,8),y:18,size:8,font,color:muted});p.drawText('点名：三次点名分别在对应方框内勾选', {x:margin,y:18,size:8,font,color:muted})});
   return doc.save();
  }
  return {defaults,bands,create};
