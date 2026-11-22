@@ -197,3 +197,6 @@ dialog{max-height:88vh;padding:22px;width:840px}
 @media(max-width:600px){.swap-stage{inset:12px 8px 90px;padding:14px}.swap-columns{gap:10px}.swap-panel{padding:10px}.swap-panel h3{font-size:12px}.swap-flying{max-width:160px}.swap-controls{bottom:14px;gap:12px}}
 
 .mail-pdf-settings{border:1px solid var(--line);border-radius:12px;padding:16px;margin:18px 0 24px}.mail-pdf-settings .section-top{flex-wrap:wrap;gap:10px}.mail-pdf-settings h3{margin:0;flex:1}.mail-pdf-settings p{line-height:1.7}.mail-pdf-settings #mailPdfSummary{margin:12px 0 6px}
+
+/* Identity review stays usable for large rosters. */
+.identity-review-list{max-height:58vh;overflow:auto;margin:16px 0}.identity-review-list th{position:sticky;top:0;background:var(--surface,#fff);z-index:1}.identity-review-list td{vertical-align:top}.identity-actions{display:flex;gap:8px;flex-wrap:wrap}.identity-review-list details{max-width:480px;overflow-wrap:anywhere}
