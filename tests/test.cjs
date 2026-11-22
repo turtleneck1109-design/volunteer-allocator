@@ -21,7 +21,7 @@ vm.runInContext(`
  const p=S.people.find(p=>p.cat==='normal'&&p.group),old=V.copy(S);p.locked=false;V.move(S,[p.id],'reserve');if(!p.reserve)throw Error('人工移动失败');S=old;
  const testLeader=S.people.find(p=>p.id===S.groups[0].leader);let blocked=false;try{V.move(S,[testLeader.id],S.groups[1].id)}catch(e){blocked=true}if(!blocked)throw Error('允许错误移动组长');
  V.validateFile(S);globalThis.testState=V.copy(S);globalThis.exportBytes=out;globalThis.zipBytes=zipFiles([{name:'中文名单.xlsx',data:out}]);
- globalThis.emlText=makeEml({g:S.groups[0],p:testLeader,email:'leader@example.com',subject:'测试活动',body:'中文正文'});
+ globalThis.emlText=makeEml({g:S.groups[0],p:testLeader,email:'leader@example.com',subject:'测试活动',body:'中文正文'},new Uint8Array([37,80,68,70]));
  console.log('通过：模板导入、跨表查重、家属姓名关联、任职、四阶段分配、容量、储备、手动移动、组长保护、Excel往返。');
 `,context);
 fs.writeFileSync(__dirname+'/test-input.xlsx',context.sampleBytes);

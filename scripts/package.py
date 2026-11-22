@@ -17,6 +17,9 @@ with zipfile.ZipFile(folder / filename, 'w', zipfile.ZIP_DEFLATED) as z:
         ('docs/SPECIFICATION.md', '项目说明书.md'),
         ('THIRD_PARTY_NOTICES.md', 'THIRD_PARTY_NOTICES.md'),
         ('vendor/SheetJS-LICENSE.txt', 'SheetJS-LICENSE.txt'),
+        ('vendor/pdf-lib-LICENSE.txt', 'pdf-lib-LICENSE.txt'),
+        ('vendor/fontkit-LICENSE.txt', 'fontkit-LICENSE.txt'),
+        ('vendor/NotoSansSC-LICENSE.txt', 'NotoSansSC-LICENSE.txt'),
     ]:
         z.write(root / source, '志愿者分组/' + target)
 print('Packaged: releases/' + filename)

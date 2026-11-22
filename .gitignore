@@ -9,3 +9,6 @@ node_modules/
 /tests/*.eml
 /tests/feedback-fixture.json
 /releases/
+
+/tmp/
+/output/
