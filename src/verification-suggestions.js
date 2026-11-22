@@ -11,12 +11,13 @@ async function suggest(reference,rows,scope,V,A,options={}){
  const s=V.copy(reference);V.resolveFamily(s);
  const norm=x=>String(x??'').trim().replace(/\s+/g,''),byId=new Map(),positions=new Map();
  rows.forEach((r,index)=>{const p=s.people.find(p=>r.student?norm(p.student)===norm(r.student):norm(p.name)===norm(r.name));if(!p)return;byId.set(p.id,index);positions.set(p.id,r.target||A.groupMatches(r.group,s.groups)[0])});
- const units=V.units(s).filter(u=>u.every(p=>byId.has(p.id)&&!p.independent));
+ s.people.forEach(p=>{const target=positions.get(p.id);p.group=s.groups.some(g=>g.id===target)?target:null});
+ const units=V.activeUnits(s).filter(u=>u.every(p=>byId.has(p.id)&&!p.independent));
  const counts=new Map(s.groups.map(g=>[g.id,0]));positions.forEach(t=>{if(counts.has(t))counts.set(t,counts.get(t)+1)});
  const targetName=id=>s.groups.find(g=>g.id===id)?s.groups.find(g=>g.id===id).no+'组 · '+s.groups.find(g=>g.id===id).name:id==='reserve'?'储备':'独立区长';
  const budget=options.budget??1200,limit=options.limit??3,seen=new Set();let scans=0;
  const canGo=(u,target)=>{
-  if(target==='reserve')return u.every(p=>p.cat==='normal')&&!u.some(p=>s.groups.some(g=>g.leader===p.id));
+  if(target==='reserve')return u.every(p=>['normal','couple'].includes(p.cat))&&!u.some(p=>s.groups.some(g=>g.leader===p.id));
   const g=s.groups.find(g=>g.id===target);return !!g&&u.every(p=>s.groups.filter(x=>x.leader===p.id).every(role=>norm(role.no)===norm(g.no)));
  };
  async function consider(changes){

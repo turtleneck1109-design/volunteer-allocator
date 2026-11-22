@@ -52,7 +52,7 @@ function audit(reference,rows,scope,V,customWeights=reference.verificationWeight
  identityFaults+=missing.length;
  s.people.filter(p=>p.cat==='family').forEach(p=>{const assigned=assignments.get(p.id);if(assigned&&!s.groups.some(g=>g.id===assigned.target)){identityFaults++;add('error','家属未正式录取',p.name+' 必须安排正式岗位，不能放入储备或独立管理',assigned.source)}});
  const relationProblems=V.relationIssues(s).filter(i=>scope==='all'||i.ids.some(id=>assignments.has(id)));relationProblems.forEach(i=>add('error','原始关联待处理',i.message));
- const units=V.units(s).filter(u=>u.length>1);let broken=0;
+ const bindingState=V.copy(s);bindingState.people.forEach(p=>{const target=assignments.get(p.id)?.target;p.group=s.groups.some(g=>g.id===target)?target:null});const units=V.activeUnits(bindingState).filter(u=>u.length>1);let broken=0;
  units.forEach(u=>{const places=u.map(p=>assignments.get(p.id)?.target).filter(Boolean);if(!places.length)return;
   if(new Set(places).size>1||(scope==='all'&&places.length!==u.length)){broken++;add('error','绑定拆分',u.map(p=>p.name).join('、')+' 未全部安排在同一岗位')}
   else if(places.length!==u.length)add('warning','绑定待核对',u.map(p=>p.name).join('、')+' 未全部出现在本次局部名单中');
@@ -69,7 +69,7 @@ function audit(reference,rows,scope,V,customWeights=reference.verificationWeight
  const components=[],part=(key,loss,denominator,note)=>{const max=scoringWeights[key],name=criteria.find(c=>c.key===key).name;components.push({key,name,max,score:Math.round(max*(1-Math.min(1,loss/Math.max(1,denominator)))*10)/10,note})};
  part('identity',identityFaults,Math.max(rows.length,scope==='all'?expected.length:0),'未知、冲突、重复记录；全量核对另检查遗漏');
  part('capacity',capLoss,checkedGroups.reduce((n,g)=>n+g.cap,0),'按缺额与超额人数占总名额的比例扣分');
- if(units.length||relationProblems.length)part('binding',broken+relationProblems.length,units.length+relationProblems.length,'已绑定的情侣、家属及团体须同一子岗位');
+ if(units.length||relationProblems.length)part('binding',broken+relationProblems.length,units.length+relationProblems.length,'家属及团体同组；情侣仅双方正式录取时须同组');
  if(roleGroups.size||roleFaults)part('roles',roleFaults,roleGroups.size,'同组号子岗位可共用组长，组长只占一次名额');
  for(const [key,label] of [['internal','内部均衡'],['photo','摄影均衡'],['run','小闪电均衡']]){
   const total=groupResults.reduce((n,g)=>n+g[key],0);if(!total||groupResults.length<2)continue;

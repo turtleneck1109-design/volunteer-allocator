@@ -8,13 +8,13 @@ function fixture(){
 }
 const s=fixture(),before=JSON.stringify(s),plan=AllocationPlayback.remaining(s,V);
 assert.equal(JSON.stringify(s),before);assert.equal(plan.total,17);
-assert.deepEqual(plan.steps.map(s=>s.label),['内部与家属','团体A','情侣','普通','储备']);
+assert.deepEqual(plan.steps.map(s=>s.label),['内部与家属','团体A','普通与情侣','储备']);
 assert.deepEqual(V.validate(plan.final,true),[]);
 assert(plan.final.people.filter(p=>['l1','l2','n0'].includes(p.id)).every(p=>p.group===s.people.find(x=>x.id===p.id).group));
 assert(plan.steps.every(step=>step.moves.every(move=>!move.ids.includes('n0'))));
 assert.deepEqual(plan.steps.find(s=>s.label==='团体A').moves.map(m=>m.ids),[['t1','t2']]);
-assert.deepEqual(plan.steps.find(s=>s.label==='情侣').moves.map(m=>m.ids),[['c1','c2']]);
-assert.deepEqual(plan.steps.filter(s=>['普通','储备'].includes(s.label)).flatMap(s=>s.moves.flatMap(m=>m.ids)),Array.from({length:11},(_,i)=>'n'+(i+1)));
+assert.deepEqual(plan.steps.find(s=>s.label==='普通与情侣').moves.slice(0,2).map(m=>m.ids),[['c1'],['c2']]);
+assert.deepEqual(plan.steps.filter(s=>['普通与情侣','储备'].includes(s.label)).flatMap(s=>s.moves.flatMap(m=>m.ids)).filter(id=>!id.startsWith('c')),Array.from({length:11},(_,i)=>'n'+(i+1)));
 assert.equal(AllocationPlayback.remaining(plan.final,V).total,0);
 const huge=fixture();huge.people.push(...Array.from({length:15},(_,i)=>V.person({id:'big'+i,name:'大团体'+i,cat:'team',teams:['大团体']})));
 const partial=AllocationPlayback.remaining(huge,V);assert.equal(partial.pending,15);assert(partial.final.people.filter(p=>p.id.startsWith('big')).every(p=>!p.group&&!p.reserve));
@@ -27,7 +27,7 @@ vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/../src/app.js'
 const run=code=>vm.runInContext(code,ctx),json=code=>JSON.parse(run(`JSON.stringify(${code})`)),persisted=()=>storage.get(storage.get('current')).state;
 function reset(){run(`S=fixture();pendingImports=[];history=[];db=database;demoSession=null;demoPlayback=null;busy=false;page='internal';globalThis.errors=[];globalThis.flights=[];render=()=>{};renderDemoPlaybackBoard=()=>{};updateDemoPlaybackControls=()=>{};toast=()=>{};errorBox=e=>errors.push(e.message);waitDemoPlayback=async run=>{if(run.cancelled)throw DEMO_PLAYBACK_CANCELLED};flyDemoUnit=async(run,ids)=>{flights.push(ids)};`);failAt=0}
 (async()=>{
- reset();await run('autoRemaining()');assert.deepEqual(json('V.validate(S,true)'),[]);assert.deepEqual(json('S'),persisted());assert.equal(json('history.length'),7);assert.equal(json('flights.flat().length'),17);assert.equal(run('busy'),false);assert.equal(app.inert,false);
+ reset();await run('autoRemaining()');assert.deepEqual(json('V.validate(S,true)'),[]);assert.deepEqual(json('S'),persisted());assert.equal(json('history.length'),6);assert.equal(json('flights.flat().length'),17);assert.equal(run('busy'),false);assert.equal(app.inert,false);
  // Stop during team flight: keep the successfully persisted internal stage, discard current team.
  reset();run(`flyDemoUnit=async(run,ids)=>{if(run.label==='团体A')run.cancelled=true}`);assert.equal(await run('autoRemaining()'),false);
  assert.equal(run('S.confirmed.internal'),true);assert.equal(json('S.people.filter(p=>p.teams.length&&p.group).length'),0);assert.deepEqual(json('S'),persisted());assert.equal(json('history.length'),2);const checkpoint=json('S');

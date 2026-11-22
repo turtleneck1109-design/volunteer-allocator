@@ -6,7 +6,7 @@ function timeline(initial,states,final,V){
  const position=p=>p.independent?'independent':p.group||(p.reserve?'reserve':'pending');
  for(const step of states){
   const old=new Map(previous.people.map(p=>[p.id,p])),changed=new Set(step.state.people.filter(p=>position(p)!==position(old.get(p.id))).map(p=>p.id));
-  const units=V.units(step.state),byUnit=new Map();units.forEach(unit=>unit.forEach(p=>byUnit.set(p.id,unit)));
+  const units=V.hardUnits(step.state),byUnit=new Map();units.forEach(unit=>unit.forEach(p=>byUnit.set(p.id,unit)));
   const seen=new Set(),moves=[];
   for(const p of step.state.people){
    if(!changed.has(p.id)||seen.has(p.id))continue;

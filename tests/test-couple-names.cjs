@@ -1,6 +1,6 @@
 const {V}=require('../src/core.js'),assert=require('assert');
 const make=rows=>({...V.blank(),people:rows.map(r=>V.person(r))});
-let s=make([{id:'a',name:'张三',cat:'couple',partnerName:'李四'},{id:'b',name:'李四',cat:'couple'}]);V.resolveFamily(s);assert.equal(s.people[0].partnerTarget,'b');assert.deepEqual(V.relationErrors(s),[]);assert.equal(V.units(s).length,1);assert(V.eligible(V.units(s)[0],'couple'));
+let s=make([{id:'a',name:'张三',cat:'couple',partnerName:'李四'},{id:'b',name:'李四',cat:'couple'}]);V.resolveFamily(s);assert.equal(s.people[0].partnerTarget,'b');assert.deepEqual(V.relationErrors(s),[]);assert.equal(V.units(s).length,1);assert(!V.eligible(V.units(s)[0],'couple'));assert(V.hardUnits(s).every(u=>V.eligible(u,'normal')));
 s.people[1].partnerName='张三';V.resolveFamily(s);assert.deepEqual(V.relationErrors(s),[]);assert.equal(V.units(s)[0].length,2);
 s=make([{id:'a',name:'张三',cat:'couple',partnerName:'李四'},{id:'b',name:'李四',cat:'normal'},{id:'c',name:'李四',cat:'normal'}]);V.resolveFamily(s);assert.equal(s.people[0].partnerTarget,null);assert(V.relationErrors(s).some(x=>x.includes('请确认伴侣')));s.people[0].partnerTarget='c';assert.deepEqual(V.relationErrors(s),[]);
 s=make([{id:'a',name:'张三',cat:'couple',partnerName:'不存在'}]);V.resolveFamily(s);assert(V.relationErrors(s).length);s.people[0].partnerTarget='a';assert(V.relationErrors(s).some(x=>x.includes('不能关联自己')));

@@ -22,11 +22,11 @@ vm.runInContext(`
  const testLeader=S.people.find(p=>p.id===S.groups[0].leader);let blocked=false;try{V.move(S,[testLeader.id],S.groups[1].id)}catch(e){blocked=true}if(!blocked)throw Error('允许错误移动组长');
  V.validateFile(S);globalThis.testState=V.copy(S);globalThis.exportBytes=out;globalThis.zipBytes=zipFiles([{name:'中文名单.xlsx',data:out}]);
  globalThis.emlText=makeEml({g:S.groups[0],p:testLeader,email:'leader@example.com',subject:'测试活动',body:'中文正文'},new Uint8Array([37,80,68,70]));
- console.log('通过：模板导入、跨表查重、家属姓名关联、任职、四阶段分配、容量、储备、手动移动、组长保护、Excel往返。');
+ console.log('通过：模板导入、跨表查重、家属姓名关联、任职、统一普通与情侣分配、容量、储备、手动移动、组长保护、Excel往返。');
 `,context);
 fs.writeFileSync(__dirname+'/test-input.xlsx',context.sampleBytes);
 fs.writeFileSync(__dirname+'/test-export.xlsx',context.exportBytes);fs.writeFileSync(__dirname+'/test-package.zip',context.zipBytes);fs.writeFileSync(__dirname+'/test-mail.eml',context.emlText);
-const state=context.testState,full=state.groups[0],unit=V.units(state).find(u=>u[0].teams.length);unit.forEach(p=>p.locked=false);const before=JSON.stringify(state);assert.throws(()=>V.move(state,unit.map(p=>p.id),full.id));assert.equal(JSON.stringify(state),before);
+const state=context.testState,unit=V.units(state).find(u=>u[0].teams.length),full=state.groups.find(g=>g.id!==unit[0].group&&state.people.filter(p=>p.group===g.id).length+unit.length>g.cap);unit.forEach(p=>p.locked=false);const before=JSON.stringify(state);assert.throws(()=>V.move(state,unit.map(p=>p.id),full.id));assert.equal(JSON.stringify(state),before);
 const huge=V.blank();huge.groups=[{id:'g',no:'1',name:'小组',cap:2,leader:'l',area:null}];huge.people=[V.person({id:'l',name:'组长',cat:'internal',group:'g',locked:true}),...['a','b','c'].map(id=>V.person({id,name:id,cat:'team',teams:['大团体']}))];const r=V.allocate(huge,'team','大团体',1,5);assert.equal(r.unplaced.length,3);assert(!huge.people.slice(1).some(p=>p.reserve||p.group));
 const dup=V.blank();dup.people=[V.person({name:'同名',student:'1'}),V.person({name:'同名',student:'2'})];assert.equal(V.duplicateSets(dup).length,1);V.markDistinct(dup,dup.people.map(p=>p.id));assert.equal(V.duplicateSets(dup).length,0);
 console.log('通过：容量拒绝且不部分修改、过大团体保留待处理、同名不同人确认。');
