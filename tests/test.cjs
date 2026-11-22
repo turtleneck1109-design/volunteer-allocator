@@ -40,12 +40,12 @@ if(nextGroupNumber()!==6)throw Error('手动添加组号建议错误');
 console.log('通过：无组号自动编号、空行合计排除、区域合并、续号、避让已有编号、重复组号按项目独立保留。');
 `,context);
 vm.runInContext(`(async()=>{
- render=()=>{};closeModal=()=>{};toast=()=>{};
+ render=()=>{};closeModal=()=>{};toast=()=>{};modal=(title,html)=>{globalThis.recoveryDialog=html};
  let captured=[],failAt=0,calls=0;
  saveSnapshot=async(label,state=S,imports=pendingImports)=>{calls++;if(calls===failAt)return false;captured.push({label,state:V.copy(state),pendingImports:V.copy(imports)});return true};
  const initial=()=>{S=V.blank();S.name='旧活动';S.people=[V.person({name:'测试人员'})];S.groups=[{id:'g',no:'1',name:'测试组',cap:5}];pendingImports=[{name:'未确认表格',rows:[['姓名'],['测试人员']]}];selected=new Set([S.people[0].id]);query='旧搜索';currentTeam='旧团体';page='overview'};
  initial();if(!await resetProject('clear','旧活动'))throw Error('清空失败');if(S.name!=='旧活动'||S.people.length||S.groups.length||pendingImports.length||selected.size||page!=='import')throw Error('清空状态不完整');if(captured[0].state.people.length!==1||captured[0].pendingImports.length!==1||captured[1].pendingImports.length)throw Error('清空前备份或空白快照错误');
  initial();calls=0;captured=[];if(!await resetProject('new','新的活动'))throw Error('新建失败');if(S.name!=='新的活动'||captured[0].state.name!=='旧活动')throw Error('活动名称错误');
- for(const n of [1,2]){initial();calls=0;failAt=n;const before=JSON.stringify(S);if(await resetProject('clear','旧活动'))throw Error('保存失败却返回成功');if(JSON.stringify(S)!==before||pendingImports.length!==1||busy)throw Error('保存失败后修改了当前活动')}
+ for(const n of [1,2]){initial();calls=0;failAt=n;const before=JSON.stringify(S);if(await resetProject('clear','旧活动'))throw Error('保存失败却返回成功');if(JSON.stringify(S)!==before||pendingImports.length!==1||busy)throw Error('保存失败后修改了当前活动');if(!recoveryDialog.includes('打开空白临时活动'))throw Error('保存失败没有恢复入口')}
  console.log('通过：新建与清空、待导入表格备份、状态重置、任一保存失败不清空。');
 })()`,context).catch(e=>{console.error(e);process.exitCode=1});
