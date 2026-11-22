@@ -59,3 +59,6 @@ scripts/   构建、测试和打包入口
 当前为功能测试版。自动分配草案仍应检查；岗位报名资格尚未建立独立字段，拖拽可用性依据容量、绑定、锁定及任职规则。邮件功能生成草稿，并不直接连接邮件服务器发送。自动测试覆盖逻辑和 Excel 读回，不等同于所有浏览器的视觉与交互验收。
 
 详见 [使用说明](docs/USER_GUIDE.md) 与 [项目说明书](docs/SPECIFICATION.md)。第三方组件许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。项目自身暂未指定开源许可。
+
+
+网页版构建：`npm run build:web` 输出 `_site/`，部署整个目录。主程序与样式优先加载，Excel／PDF 组件和字体使用同源散列文件名按需下载。`npm run build` 和 `npm run package` 继续生成内嵌全部资源的离线单文件及分享包。

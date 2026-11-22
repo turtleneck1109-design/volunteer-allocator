@@ -20,12 +20,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: npm test
-      - run: npm run build
-      - name: Prepare public website
-        run: |
-          mkdir -p _site
-          cp 'dist/志愿者分组-完整测试版.html' _site/index.html
-          touch _site/.nojekyll
+      - run: npm run build:web
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

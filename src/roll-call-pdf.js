@@ -11,6 +11,7 @@
  }
  function clean(value){return String(value??'').replace(/\r\n?/g,'\n').replace(/\t/g,' ').replace(/[\u200b\u2060\ufeff]/g,'').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g,'')}
  async function create(data,env={}){
+  if(!env.fontBytes&&globalThis.VolunteerAssets){const resources=await globalThis.AppAssets.pdf(env.onProgress);env={...env,...resources};cachedBytes=resources.fontBytes}
   const lib=env.PDFLib||globalThis.PDFLib,kit=env.fontkit||globalThis.fontkit;
   let bytes=env.fontBytes;
   if(!bytes){if(!cachedBytes){const encoded=document.getElementById('rollCallFont')?.textContent.trim();if(!encoded)throw Error('点名 PDF 字体未加载，请使用完整项目文件');cachedBytes=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0))}bytes=cachedBytes}
